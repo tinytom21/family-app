@@ -117,7 +117,10 @@ const server = createServer(async (req, res) => {
        page asks for the same file and gets nothing — served explicitly rather
        than 404'd, so the console stays clean and the markup stays identical
        in both places. */
-    if (path === "/app/family-app.js" && req.method === "GET") {
+    if (
+      (path === "/app/family-app.js" || path === "/app/supabase-config.js") &&
+      req.method === "GET"
+    ) {
       res.writeHead(200, {
         "content-type": "text/javascript; charset=utf-8",
         "cache-control": "no-store",

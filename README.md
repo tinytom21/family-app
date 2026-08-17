@@ -21,6 +21,7 @@ API key given away. Clone and set a key to see that half.
 | `docs/google-setup.html` | Runbook for wiring Google Calendar access through Supabase auth. |
 | `prototypes/meal-plan/` | The working spike. |
 | `prototypes/meal-plan/src/app-state.ts` | The whole app, with no idea where it is running. |
+| `supabase/schema.sql` | Households, membership, invites and state — and the RLS that is the security model. |
 
 ## Run it
 
@@ -33,6 +34,31 @@ npm run web
 Then open <http://localhost:4321>. You get the week, the jobs, the shopping list
 and the larder, all live — confirm what is in the cupboard and watch the
 shopping list change underneath you.
+
+On a first visit you get an **intro screen** rather than somebody else's data:
+how many of you, then names and ages, then allergies, likes and dislikes.
+Allergies are matched against the tags the validator can actually enforce —
+anything it can't check (`kiwi`, say) is kept as a strong dislike and it says
+so, because an exclusion that looks like protection and isn't is worse than
+none. There's a second door marked *Show me an example family* for looking
+round.
+
+**Accounts are optional and come second.** Set the household up, use it, and
+sign in later if you want it on another device or shared with someone else.
+Signing in uploads what's already in the browser; an invite code lets the other
+adult join and change everything. A person at the table and a user with a login
+are deliberately different things — a seven-year-old doesn't need an account to
+be allergic to peanuts, and requiring one is a good way to make sure the
+allergy never gets recorded.
+
+To switch accounts on you need a Supabase project: run
+[`supabase/schema.sql`](supabase/schema.sql) in its SQL editor, then set
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` (repository secrets for the published
+build, or a `supabase.config.json` locally). Without them the app says accounts
+are off and keeps working in the browser. The anon key is public by design —
+it names the project, not the person — so Row Level Security is what actually
+protects a family's week, and the build refuses any key whose role isn't
+`anon`.
 
 **Who lives here** holds a profile per person: age bracket, allergies, likes and
 dislikes, whether they can cook, and optionally a Google account. Portion size
@@ -94,7 +120,7 @@ If both are present, Claude wins; force the other with
 ## The rest of the commands
 
 ```bash
-npm test           # 160 tests, no API key needed
+npm test           # 181 tests, no API key needed
 npm run demo       # the same week, in the terminal
 npm run guardrails # a deliberately broken plan, and what catches it
 npm run live       # one plan via the model, with token counts and cost

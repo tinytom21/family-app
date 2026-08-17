@@ -933,6 +933,18 @@ function renderCalendarButton(state) {
 
 $("calendar").addEventListener("click", () => connectCalendar(latestState));
 
+$("account").addEventListener("click", async () => {
+  const panel = $("account-panel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) {
+    await renderAccount();
+    panel.scrollIntoView({ block: "nearest" });
+  }
+});
+$("account-close").addEventListener("click", () => {
+  $("account-panel").hidden = true;
+});
+
 $("who").addEventListener("click", () => {
   const panel = $("people-panel");
   panel.hidden = !panel.hidden;
@@ -992,4 +1004,220 @@ if (window.__familyApi?.reset) {
   $("reset").addEventListener("click", () => call("/api/plan/reset"));
 }
 
-render(await api.get());
+/* ---------------- account ---------------- */
+
+/**
+ * Signing in is what turns a browser's worth of data into a shared family.
+ *
+ * Everything below degrades to a single explanatory sentence when the build
+ * has no Supabase project, which is the state the app ships in until somebody
+ * hands it one. A demo that shows a broken Sign in button teaches people the
+ * app is broken.
+ */
+let account = null;
+
+async function renderAccount() {
+  const panel = $("account-body");
+  panel.replaceChildren();
+  account ??= await import("./account.js");
+
+  if (!account.isConfigured()) {
+    $("account-sub").textContent = "Not switched on in this build.";
+    panel.append(
+      el(
+        "p",
+        "account-note",
+        "This copy has no Supabase project behind it, so there is nothing to sign in to. " +
+          "Everything you do is saved in this browser and stays there — which is fine for a look round, " +
+          "and no use for sharing with anyone.",
+      ),
+    );
+    return;
+  }
+
+  const user = await account.currentUser();
+  if (!user) {
+    $("account-sub").textContent = "Sign in to share this family across devices.";
+    const button = el("button", "btn btn-primary", "Sign in with Google");
+    button.type = "button";
+    button.addEventListener("click", () =>
+      account.signIn().catch((e) => setStatus(e.message, true)),
+    );
+    panel.append(
+      button,
+      el(
+        "p",
+        "account-note",
+        "Your week stays in this browser until you do. Signing in uploads it, " +
+          "and lets you invite whoever else needs to change it.",
+      ),
+    );
+    return;
+  }
+
+  $("account-sub").textContent = `Signed in as ${user.email}`;
+  const households = await account.myHouseholds().catch((e) => {
+    setStatus(e.message, true);
+    return [];
+  });
+
+  const local = latestState.household;
+  const remoteId = local.remoteId;
+
+  if (!remoteId && households.length === 0) {
+    panel.append(
+      el("p", "account-note", `Nothing of yours is saved to the cloud yet.`),
+      button("Save “" + (local.name || "this household") + "” to my account", true, async () => {
+        const snapshot = await api.post("/api/snapshot", {});
+        const created = await account.createHousehold(
+          local.name || "Our household",
+          snapshot,
+        );
+        await call("/api/household/rename", { name: created.name });
+        latestState.household.remoteId = created.id;
+        await renderAccount();
+        setStatus(`Saved. Invite someone from here whenever you like.`);
+      }),
+    );
+  }
+
+  for (const household of households) {
+    const row = el("div", "account-household");
+    row.append(el("strong", null, household.name));
+    row.append(
+      button("Open", false, async () => {
+        const stored = await account.loadState(household.id);
+        if (!stored?.state) {
+          setStatus("That household has no saved week yet.", true);
+          return;
+        }
+        await api.post("/api/restore", stored.state);
+        render(await api.get());
+        setStatus(`Opened ${household.name}.`);
+      }),
+    );
+    row.append(
+      button("Invite someone", false, async () => {
+        const { code, expiresAt } = await api.post("/api/invite/new", {});
+        await account.createInvite(household.id, code, expiresAt);
+        showCode(row, code);
+      }),
+    );
+    panel.append(row);
+  }
+
+  /* joining somebody else's */
+  const join = el("form", "account-join");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Invite code";
+  input.setAttribute("aria-label", "Invite code");
+  input.maxLength = 8;
+  const go = el("button", "btn", "Join a family");
+  go.type = "submit";
+  join.append(input, go);
+  join.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const checked = await api.post("/api/invite/check", { code: input.value });
+    if (checked.problem) {
+      setStatus(checked.message, true);
+      return;
+    }
+    const result = await account.joinHousehold(checked.code);
+    if (!result?.ok) {
+      const message = await api.post("/api/invite/message", {
+        problem: result?.problem ?? "unknown",
+      });
+      setStatus(message.message, true);
+      return;
+    }
+    const stored = await account.loadState(result.household_id);
+    if (stored?.state) {
+      await api.post("/api/restore", stored.state);
+      render(await api.get());
+    }
+    setStatus("Joined. Everything here is yours to change.");
+    await renderAccount();
+  });
+  panel.append(join);
+
+  const out = button("Sign out", false, async () => {
+    await account.signOut();
+    await renderAccount();
+  });
+  out.classList.add("btn-quiet");
+  panel.append(out);
+}
+
+function button(label, primary, onClick) {
+  const node = el("button", `btn${primary ? " btn-primary" : ""}`, label);
+  node.type = "button";
+  node.addEventListener("click", async () => {
+    node.disabled = true;
+    try {
+      await onClick();
+    } catch (error) {
+      setStatus(error.message, true);
+    } finally {
+      node.disabled = false;
+    }
+  });
+  return node;
+}
+
+function showCode(row, code) {
+  const existing = row.querySelector(".invite-code");
+  if (existing) existing.remove();
+  const box = el("span", "invite-code", code);
+  box.title = "Read this out to whoever is joining. It lasts a week.";
+  row.append(box);
+}
+
+/* ---------------- first run ---------------- */
+
+/**
+ * Nobody should land in somebody else's fixture week.
+ *
+ * On a first visit the intro screen takes the whole page and the app proper is
+ * not rendered at all until there is a household to render it for. The example
+ * family is a deliberate second door rather than the default, so real data and
+ * made-up data never get mixed up in the same household.
+ */
+async function boot() {
+  let state = await api.get();
+
+  if (!state.setUp) {
+    const { runSetup } = await import("./setup.js");
+    const shell = $("setup");
+    shell.hidden = false;
+    $("app-shell").hidden = true;
+
+    const draft = await runSetup(shell, {
+      validate: async (d) => (await api.post("/api/household/validate", d)).issues,
+    });
+
+    state = draft
+      ? await api.post("/api/household/create", draft)
+      : await api.post("/api/household/example", {});
+
+    shell.hidden = true;
+    shell.replaceChildren();
+    $("app-shell").hidden = false;
+
+    if (draft?.people?.length && state.unrecognised?.length) {
+      // Said out loud rather than swallowed: an exclusion the validator cannot
+      // enforce has been demoted, and the person who typed it should know.
+      const lines = state.unrecognised
+        .map((u) => `${u.name}: ${u.entries.join(", ")}`)
+        .join(" · ");
+      setStatus(
+        `Kept as strong dislikes, because they cannot be checked automatically — ${lines}`,
+        true,
+      );
+    }
+  }
+
+  render(state);
+}
+
+await boot();

@@ -51,6 +51,15 @@ import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
 import {
+  INVITE_PROBLEMS,
+  generateInviteCode,
+  inviteExpiry,
+  isWellFormedInviteCode,
+  normaliseInviteCode,
+  peopleFromDraft,
+  validateDraft,
+} from "./domain/household.ts";
+import {
   CONSTRAINTS,
   DEMO_EVENTS,
   DEMO_LARDER,
@@ -105,8 +114,23 @@ export interface ApiResult {
   readonly body: unknown;
 }
 
+export interface HouseholdInfo {
+  /** What the family call themselves. */
+  name: string;
+  /**
+   * Whether anybody has been through the intro screen.
+   *
+   * False on a first visit, which is what puts the wizard in front of the app
+   * rather than dropping a stranger into somebody else's fixture week.
+   */
+  setUp: boolean;
+  /** Set once the household exists in Supabase rather than only in a browser. */
+  remoteId?: string;
+}
+
 /** The part of the state worth keeping between visits. */
 export interface Snapshot {
+  household: HouseholdInfo;
   plan: MealPlan;
   larder: Larder;
   people: Person[];
@@ -121,6 +145,7 @@ export interface Snapshot {
 
 function freshSnapshot(): Snapshot {
   return {
+    household: { name: "", setUp: false },
     plan: GOOD_PLAN,
     larder: { ...DEMO_LARDER, items: [...DEMO_LARDER.items] },
     people: PEOPLE.map((p) => ({ ...p })),
@@ -269,7 +294,11 @@ export function createApp(
       lastRun: state.lastRun,
       restockStaples: state.restockStaples,
       modelAvailable: ai.available,
+      /** False on a first visit; the client shows the intro screen instead. */
+      setUp: state.household.setUp,
       household: {
+        name: state.household.name,
+        remoteId: state.household.remoteId ?? null,
         people: state.people.map((p) => ({ ...p, portion: portionFor(p) })),
         portions: householdPortions(state.people),
         notes: CONSTRAINTS.notes,
@@ -328,6 +357,105 @@ export function createApp(
     switch (path) {
       case "/api/state":
         return ok();
+
+      /* ---- setting the household up ---- */
+
+      /* The intro screen asks rather than deciding for itself, so there is one
+         implementation of what makes a household valid. */
+      case "/api/household/validate": {
+        return { status: 200, body: { issues: validateDraft(body) } };
+      }
+
+      case "/api/household/create": {
+        const issues = validateDraft(body).filter(
+          (i) => !/able to cook/.test(i.message),
+        );
+        if (issues.length) return { status: 400, body: { issues } };
+
+        const { people, unrecognised } = peopleFromDraft(body);
+        state.people = people;
+        state.household = {
+          name: body.householdName.trim(),
+          setUp: true,
+          ...(state.household.remoteId ? { remoteId: state.household.remoteId } : {}),
+        };
+
+        // A real family starts with an empty cupboard and no jobs — those are
+        // theirs to fill. The example week stays as something to look at and
+        // replan, because an app that opens on seven blank days looks broken.
+        state.larder = { items: [], freezer: [] };
+        state.tasks = [];
+        state.eventsByPerson = {};
+        state.connected = [];
+        state.overrides = {};
+        state.confirmedWeek = null;
+        state.calendarConnectedAs = null;
+        state.lastCapture = null;
+
+        return { status: 200, body: { ...buildState(), unrecognised } };
+      }
+
+      /* Look round with made-up data. Explicitly a different door from the one
+         above, so nobody's real household is ever quietly seeded with fiction. */
+      case "/api/household/example": {
+        Object.assign(state, freshSnapshot());
+        state.household = { name: "The Hardys", setUp: true };
+        state.source = "fixture";
+        state.lastRun = null;
+        state.lastCapture = null;
+        return ok();
+      }
+
+      /* ---- invites ---- */
+
+      /* Code generation, format checking and the wording of every refusal all
+         live in the domain, so the browser cannot invent a seventh character
+         or a friendlier-but-wrong error. */
+      case "/api/invite/new": {
+        const now = new Date().toISOString();
+        return {
+          status: 200,
+          body: { code: generateInviteCode(), expiresAt: inviteExpiry(now) },
+        };
+      }
+
+      case "/api/invite/check": {
+        const code = normaliseInviteCode(body.code ?? "");
+        if (!isWellFormedInviteCode(code)) {
+          return {
+            status: 200,
+            body: { problem: "malformed", message: INVITE_PROBLEMS.malformed },
+          };
+        }
+        return { status: 200, body: { code } };
+      }
+
+      case "/api/invite/message": {
+        const problem = body.problem as keyof typeof INVITE_PROBLEMS;
+        return {
+          status: 200,
+          body: { message: INVITE_PROBLEMS[problem] ?? INVITE_PROBLEMS.unknown },
+        };
+      }
+
+      /* The whole household as one document, for syncing to an account. Both
+         hosts expose it the same way so the account code has one path. */
+      case "/api/snapshot":
+        return { status: 200, body: snapshot() };
+
+      case "/api/restore": {
+        if (!body || typeof body !== "object" || !body.people) {
+          return bad(400, "a snapshot with people is required");
+        }
+        Object.assign(state, body);
+        return ok();
+      }
+
+      case "/api/household/rename": {
+        if (!body.name?.trim()) return bad(400, "name required");
+        state.household = { ...state.household, name: body.name.trim() };
+        return ok();
+      }
 
       case "/api/options": {
         if (typeof body.restockStaples === "boolean") {
@@ -703,6 +831,7 @@ export function createApp(
   /** The bits worth persisting; everything else is derived on every read. */
   function snapshot(): Snapshot {
     return {
+      household: state.household,
       plan: state.plan,
       larder: state.larder,
       people: state.people,

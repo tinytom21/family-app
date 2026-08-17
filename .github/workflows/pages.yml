@@ -44,8 +44,16 @@ jobs:
       - name: Test
         run: npm test
 
+      # The anon key is public by design — it ships in the JavaScript of every
+      # Supabase web app. It lives in repository secrets because that is where
+      # people look for it, not because publishing it is a problem; the build
+      # refuses any key whose role is not "anon". Leave both unset and the
+      # published app simply has accounts switched off.
       - name: Build the demo
         run: npm run build:static
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - uses: actions/configure-pages@v5
 

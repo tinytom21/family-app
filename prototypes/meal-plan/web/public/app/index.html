@@ -9,6 +9,12 @@
 </head>
 <body>
 
+<!-- The intro screen. Takes the whole page on a first visit; the app below is
+     not rendered until there is a household to render it for. -->
+<main id="setup" class="setup" hidden></main>
+
+<div id="app-shell">
+
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
@@ -43,6 +49,7 @@
         <input type="checkbox" id="restock">
         <span>Restock staples</span>
       </label>
+      <button type="button" id="account" class="btn">Account</button>
       <button type="button" id="who" class="btn">Who lives here</button>
       <button type="button" id="calendar" class="btn">Connect calendar</button>
       <button type="button" id="replan" class="btn btn-primary">Replan with AI</button>
@@ -72,6 +79,18 @@
     <span class="chip assumed">assumed</span> nobody's calendar says ·
     <span class="chip override">you</span> someone corrected it
   </p>
+</section>
+
+<!-- Account and family sharing. Hidden until asked for. -->
+<section id="account-panel" class="grid-panel" aria-labelledby="h-account" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-account">Account</h2>
+      <p id="account-sub" class="grid-sub"></p>
+    </div>
+    <button type="button" id="account-close" class="btn">Done</button>
+  </div>
+  <div id="account-body" class="account-body"></div>
 </section>
 
 <!-- Profiles. Hidden until asked for; this is setup, not daily use. -->
@@ -173,10 +192,15 @@
 
 </main>
 
+</div><!-- /app-shell -->
+
 <!-- The bundled app, present only in the published build. When it loads it
      installs window.__familyApi and the client talks to it instead of a
      server; locally it is a deliberate no-op and the client uses fetch. -->
 <script src="family-app.js"></script>
+<!-- Project details for accounts, written by the build. Absent locally, where
+     the setup checker's saved project is used instead. -->
+<script src="supabase-config.js"></script>
 <script src="../vendor-supabase.js"></script>
 <script type="module" src="app.js"></script>
 </body>

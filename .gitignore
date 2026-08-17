@@ -23,3 +23,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Supabase project details for the published build. The anon key in here is
+# public by design, but which project the demo points at is a deployment
+# choice, so it is supplied at build time rather than committed.
+supabase.config.json

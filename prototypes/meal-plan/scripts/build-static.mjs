@@ -15,7 +15,7 @@
  */
 
 import { build } from "esbuild";
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -66,6 +66,71 @@ for (const file of [
   "check-logic.js",
 ]) {
   await cp(join(root, "web/public", file), join(docs, file));
+}
+
+/* ---- the Supabase project, if this build has been given one ----
+ *
+ * The anon key is public by design — it names the project, not the person, and
+ * ships in the JavaScript of every Supabase web app there is. What protects a
+ * family's week is the Row Level Security in supabase/schema.sql, written on
+ * the assumption that whoever is calling already has this key.
+ *
+ * A *service role* key is an entirely different animal and must never come
+ * near this file; the check below refuses the build if one turns up.
+ */
+const config = await readConfig();
+await writeFile(
+  join(out, "supabase-config.js"),
+  config
+    ? `window.__SUPABASE_CONFIG=${JSON.stringify(config)};\n`
+    : "/* No Supabase project configured: accounts are off in this build. */\n",
+  "utf8",
+);
+console.log(
+  config
+    ? `  accounts on — ${config.url}`
+    : "  accounts off — no project configured",
+);
+
+async function readConfig() {
+  const url = process.env.SUPABASE_URL?.trim();
+  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+  if (url && anonKey) return checkConfig({ url, anonKey });
+
+  try {
+    const raw = await readFile(join(root, "..", "..", "supabase.config.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed.url && parsed.anonKey) return checkConfig(parsed);
+  } catch {
+    /* absent is a valid state: the build simply has accounts off */
+  }
+  return null;
+}
+
+function checkConfig({ url, anonKey }) {
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) {
+    throw new Error(`Supabase URL looks wrong: ${url}`);
+  }
+  // Supabase JWTs carry their role in the payload. A service_role key grants
+  // unrestricted access to every row in the database and bypasses RLS
+  // entirely; publishing one would hand the whole thing away.
+  const payload = decodeJwtPayload(anonKey);
+  if (payload?.role && payload.role !== "anon") {
+    throw new Error(
+      `Refusing to build: that key has role "${payload.role}". Only the anon / publishable key may be published.`,
+    );
+  }
+  return { url, anonKey };
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+  } catch {
+    return null; // newer publishable keys are not JWTs; nothing to inspect
+  }
 }
 
 /* ---- the check that matters ---- */

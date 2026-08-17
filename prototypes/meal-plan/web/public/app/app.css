@@ -157,6 +157,107 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .status.error { color: var(--blocked); }
 
+/* ---------- the intro screen ---------- */
+
+.setup {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 5rem;
+  min-width: 0;
+}
+.setup-head { display: flex; gap: .9rem; align-items: flex-start; margin-bottom: 2rem; }
+.setup-mark {
+  width: 10px; height: 34px; border-radius: 2px;
+  background: var(--accent); flex: none; margin-top: .2rem;
+}
+.setup-step {
+  font-family: var(--mono); font-size: .64rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.setup h1 { font-size: 1.5rem; margin: .2rem 0 .35rem; letter-spacing: -.02em; }
+.setup-lede { font-size: .92rem; color: var(--ink-soft); }
+.setup-body { display: flex; flex-direction: column; gap: 1.1rem; }
+.setup-hint { font-size: .8rem; color: var(--ink-faint); }
+
+.setup-problems {
+  background: var(--blocked-soft); color: var(--blocked);
+  border-radius: 5px; padding: .7rem .85rem; font-size: .84rem;
+}
+.setup-problems ul {
+  display: flex; flex-direction: column; gap: .2rem;
+  padding-top: .3rem; padding-left: 1rem; list-style: disc;
+}
+
+/* step one: how many of you */
+.setup-counts { display: flex; gap: 1rem; flex-wrap: wrap; }
+.counter {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 6px; padding: .7rem .9rem; flex: 1 1 12rem;
+  box-shadow: var(--shadow);
+}
+.counter-label { flex: 1; font-weight: 600; font-size: .9rem; }
+.counter-btn {
+  font: inherit; font-size: 1.1rem; line-height: 1;
+  width: 2rem; height: 2rem; flex: none;
+  border: 1px solid var(--rule-strong); border-radius: 4px;
+  background: var(--ground); color: var(--ink); cursor: pointer;
+}
+.counter-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.counter-btn:disabled { opacity: .35; cursor: not-allowed; }
+.counter-value {
+  font-size: 1.15rem; font-weight: 700; min-width: 1.4rem; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* step two: names */
+.setup-people { display: flex; flex-direction: column; gap: .5rem; }
+.setup-person {
+  display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 5px; padding: .55rem .7rem;
+}
+.setup-person input[type="text"] { flex: 2 1 8rem; min-width: 0; }
+.setup-person select { flex: 1 1 9rem; min-width: 0; }
+.setup-person input[type="text"], .setup-person select {
+  font: inherit; font-size: .85rem; padding: .3rem .45rem;
+  border: 1px solid var(--rule-strong); border-radius: 4px;
+  background: var(--ground); color: var(--ink);
+}
+
+/* step three: the details */
+.setup-details { display: flex; flex-direction: column; gap: .9rem; }
+.setup-detail {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 6px; padding: .8rem .9rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: .5rem .7rem;
+}
+.setup-detail h2 {
+  grid-column: 1 / -1; font-size: .95rem; letter-spacing: -.01em;
+}
+.setup-field { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.setup-field-label {
+  font-family: var(--mono); font-size: .58rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+/* an allergy is not a preference and should not look like one */
+.setup-field.danger .setup-field-label { color: var(--blocked); }
+.setup-field input {
+  font: inherit; font-size: .85rem; padding: .32rem .45rem; width: 100%;
+  border: 1px solid var(--rule-strong); border-radius: 4px;
+  background: var(--ground); color: var(--ink);
+}
+.setup-field.danger input { border-color: var(--blocked); }
+.setup-household-name input { font-size: .95rem; padding: .45rem .55rem; }
+
+.setup-actions {
+  display: flex; gap: .6rem; flex-wrap: wrap;
+  padding-top: .6rem; border-top: 1px solid var(--rule); margin-top: .4rem;
+}
+.btn-quiet { background: transparent; border-color: transparent; color: var(--ink-soft); }
+.btn-quiet:hover:not(:disabled) { color: var(--accent); border-color: var(--rule-strong); }
+
 /* ---------- the week's table, and profiles ---------- */
 
 .grid-panel {
@@ -239,6 +340,30 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .chip.assumed  { background: var(--surface-alt); color: var(--ink-soft); }
 .chip.override { background: var(--open-soft); color: var(--open); }
 .chip.portion  { background: var(--surface-alt); color: var(--ink-soft); }
+
+/* account */
+.account-body { display: flex; flex-direction: column; gap: .7rem; align-items: flex-start; }
+.account-note { font-size: .84rem; color: var(--ink-soft); max-width: 44rem; }
+.account-household {
+  display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
+  width: 100%; padding: .55rem .7rem;
+  background: var(--surface-alt); border-radius: 5px;
+}
+.account-household strong { flex: 1 1 8rem; font-size: .9rem; }
+.invite-code {
+  font-family: var(--mono); font-size: 1rem; letter-spacing: .22em;
+  padding: .2rem .5rem; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent);
+  user-select: all;
+}
+.account-join { display: flex; gap: .5rem; flex-wrap: wrap; }
+.account-join input {
+  font: inherit; font-family: var(--mono); font-size: .9rem;
+  letter-spacing: .18em; text-transform: uppercase; width: 8.5rem;
+  padding: .35rem .5rem;
+  border: 1px solid var(--rule-strong); border-radius: 4px;
+  background: var(--ground); color: var(--ink);
+}
 
 /* profiles */
 .people { display: flex; flex-direction: column; }
