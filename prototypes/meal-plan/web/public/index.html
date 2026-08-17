@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The week — family app spike</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏠</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>The week</h1>
+        <p id="week-range" class="brand-sub">loading…</p>
+      </div>
+    </div>
+
+    <div class="summary" role="group" aria-label="This week at a glance">
+      <div class="stat">
+        <span id="stat-items" class="stat-figure">—</span>
+        <span class="stat-label">to buy</span>
+      </div>
+      <div class="stat">
+        <span id="stat-leftovers" class="stat-figure">—</span>
+        <span class="stat-label">with leftovers</span>
+      </div>
+      <div class="stat">
+        <span id="stat-useup" class="stat-figure">—</span>
+        <span class="stat-label">to use up</span>
+      </div>
+      <div class="stat">
+        <span id="stat-jobs" class="stat-figure">—</span>
+        <span class="stat-label">jobs due</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <label class="toggle">
+        <input type="checkbox" id="restock">
+        <span>Restock staples</span>
+      </label>
+      <button type="button" id="who" class="btn">Who lives here</button>
+      <button type="button" id="calendar" class="btn">Connect calendar</button>
+      <button type="button" id="replan" class="btn btn-primary">Replan with AI</button>
+      <button type="button" id="reset" class="btn">Reset</button>
+    </div>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+</header>
+
+<!-- The week's grid: who is in, who cooks, how long they have. -->
+<section id="grid-panel" class="grid-panel" aria-labelledby="h-grid">
+  <div class="grid-head">
+    <div>
+      <h2 id="h-grid">This week's table</h2>
+      <p id="grid-sub" class="grid-sub"></p>
+    </div>
+    <div class="grid-actions">
+      <button type="button" id="grid-reset" class="btn">Back to the calendar</button>
+      <button type="button" id="grid-confirm" class="btn btn-primary">Looks right</button>
+    </div>
+  </div>
+  <div class="scroller">
+    <table id="grid" class="grid"></table>
+  </div>
+  <p class="legend">
+    <span class="chip calendar">calendar</span> read from a diary ·
+    <span class="chip assumed">assumed</span> nobody's calendar says ·
+    <span class="chip override">you</span> someone corrected it
+  </p>
+</section>
+
+<!-- Profiles. Hidden until asked for; this is setup, not daily use. -->
+<section id="people-panel" class="grid-panel" aria-labelledby="h-people" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-people">Who lives here</h2>
+      <p class="grid-sub">Portions and who can cook follow from the age bracket unless you say otherwise.</p>
+    </div>
+    <button type="button" id="people-close" class="btn">Done</button>
+  </div>
+  <ul id="people" class="people"></ul>
+  <form id="add-person" class="add-person">
+    <input type="text" id="new-name" placeholder="Name" aria-label="Name" required>
+    <select id="new-bracket" aria-label="Age bracket"></select>
+    <button type="submit" class="btn">Add someone</button>
+  </form>
+</section>
+
+<main class="columns">
+
+  <section class="column" aria-labelledby="h-week">
+    <div class="column-head">
+      <h2 id="h-week">Meals</h2>
+      <span id="week-source" class="tag"></span>
+    </div>
+    <ol id="week" class="week"></ol>
+    <div id="validation" class="validation"></div>
+  </section>
+
+  <section class="column" aria-labelledby="h-jobs">
+    <div class="column-head">
+      <h2 id="h-jobs">Jobs</h2>
+      <span id="jobs-count" class="tag"></span>
+    </div>
+
+    <div id="reminders" class="useup" hidden>
+      <h3>Tonight and tomorrow</h3>
+      <ul id="reminder-list"></ul>
+    </div>
+
+    <div id="jobs-unplaced" class="wont-fit" hidden>
+      <h3>Will not fit this week</h3>
+      <ul id="jobs-unplaced-list"></ul>
+    </div>
+
+    <ul id="jobs" class="jobs"></ul>
+
+    <h3 class="subhead">Add jobs</h3>
+    <form id="capture" class="capture">
+      <label class="sr-only" for="capture-text">Jobs to add</label>
+      <textarea id="capture-text" rows="3"
+        placeholder="bins go out tuesdays, need to ring the dentist before term starts, sheets every couple of weeks…"></textarea>
+      <div class="capture-actions">
+        <button type="submit" id="capture-go" class="btn btn-primary">Add with AI</button>
+        <button type="button" id="capture-plain" class="btn">Add as one job</button>
+      </div>
+    </form>
+    <p id="capture-note" class="footnotes" hidden></p>
+  </section>
+
+  <section class="column" aria-labelledby="h-list">
+    <div class="column-head">
+      <h2 id="h-list">Shopping list</h2>
+      <span id="list-count" class="tag"></span>
+    </div>
+    <div id="list" class="list"></div>
+    <div id="list-footnotes" class="footnotes"></div>
+  </section>
+
+  <section class="column" aria-labelledby="h-larder">
+    <div class="column-head">
+      <h2 id="h-larder">Larder</h2>
+      <span id="larder-count" class="tag"></span>
+    </div>
+
+    <div id="use-up" class="useup" hidden>
+      <h3>Use up first</h3>
+      <ul id="use-up-list"></ul>
+    </div>
+
+    <div id="freezer-offers" class="offers" hidden>
+      <h3>Spare portions this week</h3>
+      <ul id="freezer-offer-list"></ul>
+    </div>
+
+    <h3 class="subhead">In the cupboard and fridge</h3>
+    <ul id="stock" class="stock"></ul>
+
+    <h3 class="subhead">Freezer</h3>
+    <ul id="freezer" class="freezer"></ul>
+
+    <p class="legend">
+      <span class="chip confirmed">confirmed</span> you checked ·
+      <span class="chip predicted">predicted</span> derived from the plan ·
+      <span class="chip stale">stale</span> too old to trust, so it is bought anyway
+    </p>
+  </section>
+
+</main>
+
+<script src="/vendor/supabase.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

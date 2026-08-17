@@ -1,0 +1,1207 @@
+<title>Family App Build Plan</title>
+
+<style>
+  /* ---------- tokens: light is the base, both themes defined at token level ---------- */
+  :root {
+    --ground:      #F3F4F1;
+    --surface:     #FBFBFA;
+    --surface-alt: #EAECE7;
+    --ink:         #161C19;
+    --ink-soft:    #56605A;
+    --ink-faint:   #7C857F;
+    --rule:        #D6DAD4;
+    --rule-strong: #B9BFB8;
+
+    --accent:      #1F6B57;
+    --accent-soft: #DCEAE4;
+
+    --open:        #9A5A16;
+    --open-soft:   #F3E6D4;
+    --blocked:     #9E3B2B;
+    --blocked-soft:#F5DFDA;
+    --settled:     #1F6B57;
+    --settled-soft:#DCEAE4;
+
+    --shadow: 0 1px 2px rgba(22, 28, 25, .05);
+
+    --sans: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui,
+            -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono",
+            Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101513;
+      --surface:     #161C19;
+      --surface-alt: #1C2320;
+      --ink:         #E3E8E4;
+      --ink-soft:    #99A39C;
+      --ink-faint:   #78827B;
+      --rule:        #29312C;
+      --rule-strong: #3A443E;
+
+      --accent:      #63C1A5;
+      --accent-soft: #17302A;
+
+      --open:        #DFA45E;
+      --open-soft:   #302517;
+      --blocked:     #E28372;
+      --blocked-soft:#33201C;
+      --settled:     #63C1A5;
+      --settled-soft:#17302A;
+
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #101513;
+    --surface:     #161C19;
+    --surface-alt: #1C2320;
+    --ink:         #E3E8E4;
+    --ink-soft:    #99A39C;
+    --ink-faint:   #78827B;
+    --rule:        #29312C;
+    --rule-strong: #3A443E;
+
+    --accent:      #63C1A5;
+    --accent-soft: #17302A;
+
+    --open:        #DFA45E;
+    --open-soft:   #302517;
+    --blocked:     #E28372;
+    --blocked-soft:#33201C;
+    --settled:     #63C1A5;
+    --settled-soft:#17302A;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  }
+
+  /* ---------- base ---------- */
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 60rem; margin: 0 auto; }
+  .prose { max-width: 34rem; }
+
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; margin: 0; }
+
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3.1rem);
+    font-weight: 700;
+    letter-spacing: -.028em;
+    line-height: 1.05;
+  }
+  h2 {
+    font-size: clamp(1.4rem, 2.6vw, 1.7rem);
+    font-weight: 700;
+    letter-spacing: -.018em;
+    line-height: 1.2;
+  }
+  h3 {
+    font-size: 1.06rem;
+    font-weight: 650;
+    letter-spacing: -.008em;
+  }
+
+  p { margin: 0; }
+  a { color: var(--accent); text-underline-offset: .18em; }
+  strong { font-weight: 700; color: var(--ink); }
+  code {
+    font-family: var(--mono);
+    font-size: .84em;
+    background: var(--surface-alt);
+    padding: .1em .34em;
+    border-radius: 3px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    padding: 4.5rem 0 2.2rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .masthead .lede {
+    font-size: 1.16rem;
+    color: var(--ink-soft);
+    max-width: 36rem;
+  }
+  .stamp {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+  }
+  .stamp span {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .06em;
+    padding: .28rem .55rem;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-soft);
+    border-radius: 2px;
+  }
+
+  /* ---------- sections ---------- */
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    padding: 3.2rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  section:last-of-type { border-bottom: none; }
+  .section-head { display: flex; flex-direction: column; gap: .5rem; }
+
+  /* Flex and grid items refuse to shrink below their content by default, so a
+     wide table or diagram pushes the whole page sideways instead of scrolling
+     inside its own box. min-width:0 is what lets the container win. */
+  section > *,
+  .scroller,
+  .figframe,
+  figure,
+  .panel,
+  .phase-body,
+  .action > * { min-width: 0; }
+
+  /* ---------- tables ---------- */
+  .scroller { overflow-x: auto; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 34rem;
+    font-family: var(--sans);
+    font-size: .89rem;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-bottom: .6rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .68rem .8rem .68rem 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-weight: 650;
+    font-size: .7rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  td:first-child { font-weight: 620; padding-right: 1.2rem; }
+  tbody tr:last-child td { border-bottom: none; }
+  .muted { color: var(--ink-soft); }
+
+  /* ---------- chips ---------- */
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: .64rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: .2rem .45rem;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip.settled { background: var(--settled-soft); color: var(--settled); }
+  .chip.open    { background: var(--open-soft);    color: var(--open); }
+  .chip.blocked { background: var(--blocked-soft); color: var(--blocked); }
+
+  /* ---------- phases ---------- */
+  .phases { display: flex; flex-direction: column; gap: 0; }
+  .phase {
+    display: grid;
+    grid-template-columns: 3.4rem 1fr;
+    gap: 0 1.3rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--rule);
+  }
+  .phase:first-child { border-top: 1px solid var(--rule-strong); }
+  .phase-num {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--accent);
+    line-height: 1.1;
+  }
+  .phase-body { display: flex; flex-direction: column; gap: .55rem; }
+  .phase-body ul { margin: 0; padding-left: 1.1rem; color: var(--ink-soft); font-size: .95rem; }
+  .phase-body li { margin: .2rem 0; }
+  .phase-why {
+    font-family: var(--sans);
+    font-size: .85rem;
+    color: var(--ink-faint);
+    border-left: 2px solid var(--rule-strong);
+    padding-left: .8rem;
+  }
+
+  /* ---------- verdict split ---------- */
+  .split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1.4rem;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.2rem 1.3rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+  }
+  .panel h3 { display: flex; align-items: center; gap: .5rem; }
+  .panel ul { margin: 0; padding-left: 1.1rem; font-size: .93rem; color: var(--ink-soft); }
+  .panel li { margin: .35rem 0; }
+  .panel.proved { border-top: 3px solid var(--settled); }
+  .panel.unproved { border-top: 3px solid var(--open); }
+
+  /* ---------- figures ---------- */
+  figure {
+    margin: .4rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+  }
+  .figframe {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.4rem 1.2rem;
+    overflow-x: auto;
+  }
+  figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; min-width: 30rem; }
+  figcaption {
+    font-family: var(--sans);
+    font-size: .84rem;
+    color: var(--ink-faint);
+    max-width: 40rem;
+  }
+  .svg-box { fill: var(--surface-alt); stroke: var(--rule-strong); }
+  .svg-box-accent { fill: var(--accent-soft); stroke: var(--accent); }
+  .svg-label { font-family: var(--sans); font-size: 12.5px; font-weight: 650; fill: var(--ink); }
+  .svg-sub { font-family: var(--mono); font-size: 10px; fill: var(--ink-faint); letter-spacing: .04em; }
+  .svg-edge { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-soft); letter-spacing: .03em; }
+  .svg-edge-hot { font-family: var(--mono); font-size: 10.5px; fill: var(--accent); letter-spacing: .03em; }
+  .svg-line { stroke: var(--ink-soft); stroke-width: 1.3; fill: none; }
+  .svg-line-hot { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+  .svg-zone { fill: none; stroke: var(--accent); stroke-width: 1.1; stroke-dasharray: 5 4; opacity: .75; }
+
+  /* ---------- next actions ---------- */
+  .actions { display: flex; flex-direction: column; gap: 0; }
+  .action {
+    display: grid;
+    grid-template-columns: 2.1rem 1fr auto;
+    gap: 0 1rem;
+    align-items: baseline;
+    padding: .85rem 0;
+    border-top: 1px solid var(--rule);
+    font-family: var(--sans);
+    font-size: .95rem;
+  }
+  .action:first-child { border-top: 1px solid var(--rule-strong); }
+  .action-num { font-family: var(--mono); font-size: .78rem; color: var(--ink-faint); }
+  .action-note { font-size: .84rem; color: var(--ink-faint); font-family: var(--mono); }
+
+  .callout {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    padding: 1rem 1.2rem;
+    font-size: .97rem;
+    color: var(--ink-soft);
+    max-width: 40rem;
+  }
+
+  .footnote {
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--ink-faint);
+    padding-top: 2.5rem;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 34rem) {
+    body { font-size: 16px; padding: 0 1.1rem 4rem; }
+    .phase { grid-template-columns: 1fr; gap: .5rem; }
+    .action { grid-template-columns: 1.6rem 1fr; }
+    .action-note { grid-column: 2; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Build plan &middot; revision 5 &middot; August 2026</p>
+    <h1>One app for the whole household</h1>
+    <p class="lede">
+      Meal planning, the larder, the family agenda, lists, reminders and
+      spending — in one place. Web first, so it works on a laptop the day it
+      exists; native later, if and when it earns it. This is the shape of the
+      thing, the order to build it in, and an honest account of what is still
+      unknown.
+    </p>
+    <div class="stamp">
+      <span>Web first</span>
+      <span>TypeScript</span>
+      <span>Supabase / Postgres</span>
+      <span>Claude or Gemini</span>
+      <span>Google Sign-In</span>
+      <span>Android to follow</span>
+      <span>UK</span>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">The thesis</p>
+      <h2>Why one app beats five good ones</h2>
+    </div>
+    <div class="prose">
+      <p style="margin-bottom:1rem">
+        The reason to merge these apps is not that five icons is one too many.
+        It is that the interesting information lives <em>between</em> them, and
+        no separate app can reach it. A meal plan is worthless without knowing
+        that Thursday is swimming. A shopping list should know what is already
+        in the cupboard. And a quarter's grocery total means more sitting next
+        to the quarter you started cooking from a plan.
+      </p>
+      <p>
+        The larder makes the point sharpest. As a standalone app it is a chore
+        nobody sustains; sitting between a shopping list and a meal plan, it
+        mostly fills itself in, because those two already know what came in and
+        what went out. Features that would be tedious alone become nearly free
+        in company — which is the actual argument for one app rather than five.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Settled</p>
+      <h2>Decisions locked in</h2>
+    </div>
+    <div class="scroller">
+      <table>
+        <caption>Four choices that constrain everything else</caption>
+        <thead>
+          <tr>
+            <th scope="col">Decision</th>
+            <th scope="col">Chosen</th>
+            <th scope="col">Why this one</th>
+            <th scope="col">What it costs you</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>First client</td>
+            <td>Responsive web app</td>
+            <td class="muted">Wanting the big screen changes the order of work. A web app covers laptop, desktop, tablet and phone-in-a-browser on day one, installs on a home screen as a PWA, ships to both of you without an app store, and — because the domain layer is TypeScript — reuses the planning and larder code already written rather than reimplementing it.</td>
+            <td class="muted">No home-screen widgets, weaker notifications on iOS, and offline needs a service worker rather than coming free with the platform.</td>
+          </tr>
+          <tr>
+            <td>Native apps</td>
+            <td>Android after the web app earns it</td>
+            <td class="muted">Deferred, not dropped. Build it when there is something you both use daily and the missing widget or notification is a real irritation rather than a hypothetical one.</td>
+            <td class="muted">A second UI to maintain when it arrives. Kotlin Multiplatform stops being the obvious choice once the shared logic already lives in TypeScript — worth re-deciding at the time.</td>
+          </tr>
+          <tr>
+            <td>Backend</td>
+            <td>Supabase</td>
+            <td class="muted">Real Postgres. Spending analysis and recipe queries are relational problems, and row-level security maps cleanly onto "one household sees its own data". Self-hostable later.</td>
+            <td class="muted">No offline story out of the box. This is the single largest open risk — see below.</td>
+          </tr>
+          <tr>
+            <td>AI model</td>
+            <td>Either — chosen by an environment variable</td>
+            <td class="muted">Claude Opus 5 for prototyping, Gemini 3.7 Flash for running costs and Google-ecosystem tidiness. Both sit behind one interface, so this stopped being a decision that has to be made now. Gemini is roughly seven times cheaper per plan; Claude is the better instruction-follower on a first pass.</td>
+            <td class="muted">Two SDKs to keep installed, and their schema dialects differ enough to need a translation layer. About a hundred lines, already written and tested.</td>
+          </tr>
+          <tr>
+            <td>Grocery prices</td>
+            <td>Not modelled at all</td>
+            <td class="muted">Pack <em>sizes</em> travel between shops well enough to be worth knowing; pack <em>prices</em> do not. A total that is confidently wrong is worse than no total, so the list says what to put in the trolley and stops there. The pack solver now minimises leftovers instead of pounds, which is the objective that survives changing supermarket.</td>
+            <td class="muted">The budget guard rail goes with it — eight hard checks rather than nine. Frugality becomes a steer in the prompt rather than a rule in code.</td>
+          </tr>
+          <tr>
+            <td>Where the AI runs</td>
+            <td>Server-side Edge Functions</td>
+            <td class="muted">The API key never ships to a device, and prompts can change without an app release.</td>
+            <td class="muted">A network round trip, and a second language (TypeScript) in the stack.</td>
+          </tr>
+          <tr>
+            <td>Region</td>
+            <td>United Kingdom</td>
+            <td class="muted">Open Banking is mature, so bank connections are a solved problem rather than a screen-scraping project.</td>
+            <td class="muted">Little, now that the money side is category totals rather than itemised receipts. The absence of a supermarket price API stopped mattering the moment prices left the design.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Architecture</p>
+      <h2>Where the work happens</h2>
+    </div>
+    <div class="prose">
+      <p>
+        The app is a thick client over a local database, talking to Postgres for
+        sync and to an Edge Function for anything that needs a model. Putting
+        the model call on the server is not a detail — it is what makes the key
+        safe, the prompt editable, and the caching worth having.
+      </p>
+    </div>
+
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 880 300" role="img"
+             aria-label="A meal plan request path: the app sends constraints to a Supabase Edge Function, which reads the ingredient catalogue and pantry from Postgres, calls Gemini with a constrained response schema, validates the returned plan in code and retries up to twice, then writes the plan and shopping list back to Postgres. The Gemini API key stays inside the server boundary.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- server boundary -->
+          <rect class="svg-zone" x="236" y="18" width="628" height="242" rx="6"/>
+          <text class="svg-edge-hot" x="852" y="38" text-anchor="end">server boundary — API key lives here</text>
+
+          <!-- app -->
+          <rect class="svg-box" x="16" y="96" width="150" height="66" rx="4"/>
+          <text class="svg-label" x="91" y="123" text-anchor="middle">App</text>
+          <text class="svg-sub" x="91" y="141" text-anchor="middle">Compose Multiplatform</text>
+
+          <!-- edge function -->
+          <rect class="svg-box-accent" x="286" y="86" width="164" height="86" rx="4"/>
+          <text class="svg-label" x="368" y="116" text-anchor="middle">Edge Function</text>
+          <text class="svg-sub" x="368" y="134" text-anchor="middle">prompt + schema</text>
+          <text class="svg-sub" x="368" y="150" text-anchor="middle">validate + repair</text>
+
+          <!-- gemini -->
+          <rect class="svg-box" x="580" y="86" width="150" height="66" rx="4"/>
+          <text class="svg-label" x="655" y="113" text-anchor="middle">Gemini 3.7 Flash</text>
+          <text class="svg-sub" x="655" y="131" text-anchor="middle">response_format schema</text>
+
+          <!-- postgres -->
+          <rect class="svg-box" x="286" y="214" width="164" height="60" rx="4"/>
+          <text class="svg-label" x="368" y="240" text-anchor="middle">Postgres</text>
+          <text class="svg-sub" x="368" y="257" text-anchor="middle">catalogue · pantry · plans</text>
+
+          <!-- app -> edge -->
+          <line class="svg-line" x1="166" y1="118" x2="278" y2="118" marker-end="url(#ar)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="222" y="110" text-anchor="middle">constraints</text>
+          <!-- edge -> app -->
+          <line class="svg-line" x1="286" y1="146" x2="174" y2="146" marker-end="url(#ar)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="222" y="163" text-anchor="middle">plan + list</text>
+
+          <!-- edge -> claude -->
+          <line class="svg-line-hot" x1="450" y1="108" x2="572" y2="108" marker-end="url(#ar)" color="var(--accent)"/>
+          <text class="svg-edge-hot" x="511" y="100" text-anchor="middle">rules + catalogue</text>
+          <!-- claude -> edge -->
+          <line class="svg-line-hot" x1="580" y1="136" x2="458" y2="136" marker-end="url(#ar)" color="var(--accent)"/>
+          <text class="svg-edge-hot" x="511" y="153" text-anchor="middle">plan JSON</text>
+
+          <!-- edge <-> postgres -->
+          <line class="svg-line" x1="352" y1="172" x2="352" y2="206" marker-end="url(#ar)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="252" y="194" text-anchor="start">reads catalogue</text>
+          <line class="svg-line" x1="392" y1="214" x2="392" y2="180" marker-end="url(#ar)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="404" y="194" text-anchor="start">writes plan</text>
+
+          <!-- repair loop -->
+          <path class="svg-line-hot" d="M 302 86 C 302 46, 434 46, 434 86" marker-end="url(#ar)" color="var(--accent)"/>
+          <text class="svg-edge-hot" x="368" y="52" text-anchor="middle">repair &times;2 if invalid</text>
+        </svg>
+      </div>
+      <figcaption>
+        One meal-plan request. The model never sees the raw household record and
+        never gets the last word: the Edge Function validates the returned plan
+        against hard constraints in ordinary code, and hands violations back for
+        a targeted repair before anything reaches the family. Repair turns
+        continue the same conversation by id rather than resending the plan.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Credentials</p>
+      <h2>Two Google credentials, one project</h2>
+    </div>
+    <div class="prose">
+      <p style="margin-bottom:1rem">
+        Calendar does drag Google into the login flow, and moving the model to
+        Gemini keeps it to one vendor. But the two credentials are not the same
+        thing and cannot stand in for each other: a family member's sign-in
+        token reads <em>their</em> calendar and cannot call Gemini, and the
+        Gemini key is yours, billed to you, and cannot read anyone's calendar.
+      </p>
+      <p>
+        What is genuinely shared is the container. One Google Cloud project,
+        one OAuth consent screen, one billing account, one place to revoke
+        things — which is a real simplification, just not a single key.
+      </p>
+    </div>
+
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 880 300" role="img"
+             aria-label="Two separate credential paths. A family member signs in with Google; Supabase Auth stores their OAuth refresh token, and the Edge Function uses that token to read that person's Google Calendar. Separately, the Edge Function uses a server-held Gemini API key, billed to the developer, to call Gemini. Both Google services sit inside one Google Cloud project.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- one cloud project -->
+          <rect class="svg-zone" x="684" y="18" width="190" height="268" rx="6"/>
+          <text class="svg-edge-hot" x="779" y="42" text-anchor="middle">one Google Cloud project</text>
+
+          <rect class="svg-box" x="10" y="126" width="118" height="56" rx="4"/>
+          <text class="svg-label" x="69" y="150" text-anchor="middle">Priya</text>
+          <text class="svg-sub" x="69" y="167" text-anchor="middle">on her phone</text>
+
+          <rect class="svg-box-accent" x="232" y="126" width="150" height="56" rx="4"/>
+          <text class="svg-label" x="307" y="150" text-anchor="middle">Supabase Auth</text>
+          <text class="svg-sub" x="307" y="167" text-anchor="middle">holds refresh token</text>
+
+          <rect class="svg-box-accent" x="470" y="126" width="142" height="56" rx="4"/>
+          <text class="svg-label" x="541" y="150" text-anchor="middle">Edge Function</text>
+          <text class="svg-sub" x="541" y="167" text-anchor="middle">holds server key</text>
+
+          <rect class="svg-box" x="700" y="58" width="170" height="56" rx="4"/>
+          <text class="svg-label" x="785" y="82" text-anchor="middle">Google Calendar</text>
+          <text class="svg-sub" x="785" y="99" text-anchor="middle">her events only</text>
+
+          <rect class="svg-box" x="700" y="196" width="170" height="56" rx="4"/>
+          <text class="svg-label" x="785" y="220" text-anchor="middle">Gemini 3.7 Flash</text>
+          <text class="svg-sub" x="785" y="237" text-anchor="middle">billed to you</text>
+
+          <line class="svg-line" x1="128" y1="154" x2="224" y2="154" marker-end="url(#ar3)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="176" y="144" text-anchor="middle">sign in</text>
+
+          <line class="svg-line" x1="382" y1="154" x2="462" y2="154" marker-end="url(#ar3)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="422" y="144" text-anchor="middle">her token</text>
+
+          <path class="svg-line" d="M 612 142 C 646 142, 656 86, 692 86" marker-end="url(#ar3)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="622" y="104" text-anchor="start">as her</text>
+
+          <path class="svg-line-hot" d="M 612 166 C 646 166, 656 224, 692 224" marker-end="url(#ar3)" color="var(--accent)"/>
+          <text class="svg-edge-hot" x="622" y="216" text-anchor="start">as you</text>
+        </svg>
+      </div>
+      <figcaption>
+        The same Edge Function makes both calls, wearing a different hat each
+        time. Getting this backwards is the mistake that leads to shipping a
+        model key to the client, or to trying to read a calendar with it.
+      </figcaption>
+    </figure>
+
+    <div class="split">
+      <div class="panel proved">
+        <h3>The family's credential</h3>
+        <ul>
+          <li>Google Sign-In, requested once, covering identity <em>and</em> the calendar scope in the same consent screen.</li>
+          <li>Supabase Auth supports Google as a provider natively and hands you the refresh token, so this is configuration rather than code.</li>
+          <li>Per person. Revoking it costs that person their calendar sync and nothing else.</li>
+          <li>Means nobody has to make an account — they already have one.</li>
+        </ul>
+      </div>
+      <div class="panel unproved">
+        <h3>Your credential</h3>
+        <ul>
+          <li>A <code>GEMINI_API_KEY</code>, held only as an Edge Function secret. It never reaches a phone.</li>
+          <li>Not tied to any family member; every plan in every household bills to you.</li>
+          <li>Rotate it without anyone signing in again.</li>
+          <li>If this ever needs to move to Vertex AI for quota or data-residency reasons, it becomes a service account — same idea, different envelope.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>The bill for consolidating.</strong> Google is now on the critical
+      path for login, calendar and meal planning at once. That is a fair trade
+      for the simplicity, but it means one suspended account takes out three
+      features rather than one. Worth keeping the model call behind a thin
+      interface so swapping it is a day's work, not a rewrite — the validation
+      and shopping-list layers are already provider-agnostic.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">The open risk</p>
+      <h2>Offline is the hard part, not the AI</h2>
+    </div>
+    <div class="prose">
+      <p style="margin-bottom:1rem">
+        The worst case for this app is mundane: two people in the same
+        supermarket, one signal bar, both ticking things off the same list.
+        Supabase gives realtime sync when you are online and nothing at all when
+        you are not, so the app cannot treat the server as the source of truth
+        for reads. Every write has to land locally first.
+      </p>
+    </div>
+
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 880 236" role="img"
+             aria-label="Offline write path: a tap on phone A writes to local SQLite immediately and appends to an outbox. When the network returns, the outbox flushes to Postgres, which pushes a realtime change to phone B. The user interface never waits on the network.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- device zone -->
+          <rect class="svg-zone" x="12" y="52" width="404" height="132" rx="6"/>
+          <text class="svg-edge-hot" x="24" y="72">on the phone — never waits for a network</text>
+
+          <!-- tap -->
+          <rect class="svg-box-accent" x="30" y="94" width="106" height="60" rx="4"/>
+          <text class="svg-label" x="83" y="120" text-anchor="middle">Tick an item</text>
+          <text class="svg-sub" x="83" y="137" text-anchor="middle">aisle 7, no signal</text>
+
+          <!-- sqlite -->
+          <rect class="svg-box" x="176" y="94" width="106" height="60" rx="4"/>
+          <text class="svg-label" x="229" y="120" text-anchor="middle">SQLite</text>
+          <text class="svg-sub" x="229" y="137" text-anchor="middle">source of truth</text>
+
+          <!-- outbox -->
+          <rect class="svg-box" x="310" y="94" width="94" height="60" rx="4"/>
+          <text class="svg-label" x="357" y="120" text-anchor="middle">Outbox</text>
+          <text class="svg-sub" x="357" y="137" text-anchor="middle">queued ops</text>
+
+          <!-- postgres -->
+          <rect class="svg-box" x="500" y="94" width="140" height="60" rx="4"/>
+          <text class="svg-label" x="570" y="120" text-anchor="middle">Postgres</text>
+          <text class="svg-sub" x="570" y="137" text-anchor="middle">merge by rule</text>
+
+          <!-- phone b -->
+          <rect class="svg-box" x="726" y="94" width="130" height="60" rx="4"/>
+          <text class="svg-label" x="791" y="120" text-anchor="middle">Her phone</text>
+          <text class="svg-sub" x="791" y="137" text-anchor="middle">already at the till</text>
+
+          <!-- arrows -->
+          <line class="svg-line-hot" x1="136" y1="124" x2="168" y2="124" marker-end="url(#ar2)" color="var(--accent)"/>
+          <line class="svg-line-hot" x1="282" y1="124" x2="302" y2="124" marker-end="url(#ar2)" color="var(--accent)"/>
+          <text class="svg-edge-hot" x="152" y="90" text-anchor="middle">1 write</text>
+          <text class="svg-edge-hot" x="292" y="90" text-anchor="middle">2 queue</text>
+
+          <line class="svg-line" x1="404" y1="124" x2="492" y2="124"
+                stroke-dasharray="5 4" marker-end="url(#ar2)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="448" y="90" text-anchor="middle">3 on reconnect</text>
+          <text class="svg-edge" x="448" y="146" text-anchor="middle">flush</text>
+
+          <line class="svg-line" x1="640" y1="124" x2="718" y2="124" marker-end="url(#ar2)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="679" y="90" text-anchor="middle">4 realtime</text>
+
+          <!-- merge note -->
+          <text class="svg-sub" x="570" y="196" text-anchor="middle">add/remove: union with tombstones</text>
+          <text class="svg-sub" x="570" y="211" text-anchor="middle">checked: last write wins, per item</text>
+        </svg>
+      </div>
+      <figcaption>
+        The shopping list is unusually friendly to this: adding and removing are
+        set operations, and "checked" is a single flag per item. Two people
+        ticking different things merge without conflict; two people ticking the
+        same thing agree anyway.
+      </figcaption>
+    </figure>
+
+    <div class="callout">
+      <strong>Recommendation.</strong> Hand-roll the outbox for Phase&nbsp;1
+      rather than adopting PowerSync or ElectricSQL on day one. List semantics
+      are simple enough that a general-purpose sync engine is a large dependency
+      bought to solve a small problem — and building it yourself means you
+      understand the merge rules when the agenda and the ledger need their own.
+      Revisit the moment a feature genuinely needs arbitrary offline SQL.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">New feature</p>
+      <h2>The larder, without the data entry</h2>
+    </div>
+    <div class="prose">
+      <p style="margin-bottom:1rem">
+        Every kitchen-inventory app dies the same death, and it is worth being
+        clear about why before designing around it. Entering data costs effort
+        every single time, while the payoff arrives only occasionally. Depletion
+        is invisible — you know when you bought the onions, you never record
+        using half of one — so the count drifts wrong within days. And a
+        confidently wrong larder is worse than no larder at all, because it
+        tells you that you have flour when you do not, and you find out at the
+        point of no return.
+      </p>
+      <p>
+        So the design goal is not a complete inventory. It is to be usefully
+        right about the handful of things that change a decision, and honest
+        about the rest. Three ideas carry it.
+      </p>
+    </div>
+
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 880 292" role="img"
+             aria-label="Stock is derived rather than entered: the shopping list adds what was bought, the meal plan subtracts what the week eats, and a person only occasionally corrects the figure. The resulting projection is trusted and subtracted from the next shopping list only while it is recent; once it goes stale the item is bought again regardless.">
+          <defs>
+            <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="svg-box" x="14" y="34" width="152" height="54" rx="4"/>
+          <text class="svg-label" x="90" y="58" text-anchor="middle">Shopping list</text>
+          <text class="svg-sub" x="90" y="75" text-anchor="middle">what came in</text>
+
+          <rect class="svg-box" x="14" y="196" width="152" height="54" rx="4"/>
+          <text class="svg-label" x="90" y="220" text-anchor="middle">Meal plan</text>
+          <text class="svg-sub" x="90" y="237" text-anchor="middle">what goes out</text>
+
+          <rect class="svg-box" x="14" y="115" width="152" height="54" rx="4"/>
+          <text class="svg-label" x="90" y="139" text-anchor="middle">A person</text>
+          <text class="svg-sub" x="90" y="156" text-anchor="middle">rarely</text>
+
+          <rect class="svg-box-accent" x="300" y="108" width="172" height="68" rx="4"/>
+          <text class="svg-label" x="386" y="136" text-anchor="middle">Projected stock</text>
+          <text class="svg-sub" x="386" y="154" text-anchor="middle">bought − eaten</text>
+          <text class="svg-sub" x="386" y="168" text-anchor="middle">± corrections</text>
+
+          <rect class="svg-box" x="620" y="56" width="212" height="58" rx="4"/>
+          <text class="svg-label" x="726" y="80" text-anchor="middle">Trusted</text>
+          <text class="svg-sub" x="726" y="97" text-anchor="middle">subtracted from the shop</text>
+
+          <rect class="svg-box" x="620" y="182" width="212" height="58" rx="4"/>
+          <text class="svg-label" x="726" y="206" text-anchor="middle">Stale</text>
+          <text class="svg-sub" x="726" y="223" text-anchor="middle">bought anyway</text>
+
+          <path class="svg-line" d="M 166 61 C 232 61, 240 122, 292 122" marker-end="url(#ar4)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="214" y="46" text-anchor="middle">+ bought</text>
+
+          <path class="svg-line" d="M 166 223 C 232 223, 240 164, 292 164" marker-end="url(#ar4)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="214" y="248" text-anchor="middle">− eaten</text>
+
+          <line class="svg-line" x1="166" y1="142" x2="292" y2="142"
+                stroke-dasharray="5 4" marker-end="url(#ar4)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="229" y="134" text-anchor="middle">corrections only</text>
+
+          <path class="svg-line-hot" d="M 472 128 C 544 128, 556 85, 612 85" marker-end="url(#ar4)" color="var(--accent)"/>
+          <text class="svg-edge-hot" x="545" y="120" text-anchor="middle">checked recently</text>
+
+          <path class="svg-line" d="M 472 158 C 544 158, 556 211, 612 211" marker-end="url(#ar4)" color="var(--ink-soft)"/>
+          <text class="svg-edge" x="545" y="178" text-anchor="middle">older than that</text>
+        </svg>
+      </div>
+      <figcaption>
+        <strong>One: derive, don't ask.</strong> The two flows that bracket the
+        cupboard are already in the app. Stock is mostly arithmetic on them, so
+        manual entry exists to correct drift rather than to create the record.
+        <strong>Two: say when you don't know.</strong> A figure only reduces the
+        shopping list while it is recent; after that the app admits it is
+        guessing and buys the thing regardless.
+      </figcaption>
+    </figure>
+
+    <div class="scroller">
+      <table>
+        <caption>Three: different things deserve different treatment</caption>
+        <thead>
+          <tr>
+            <th scope="col">Class</th>
+            <th scope="col">The question you actually ask</th>
+            <th scope="col">So it is tracked as</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Staple</td>
+            <td class="muted">"Have I got any?" — nobody wants to count grams of flour.</td>
+            <td class="muted">Assumed present. One tap to say it has run out.</td>
+          </tr>
+          <tr>
+            <td>Ambient</td>
+            <td class="muted">"How many left?" — tins, pasta, rice. Worth counting, never rots.</td>
+            <td class="muted">A number, with no expiry pressure and a long patience for staleness.</td>
+          </tr>
+          <tr>
+            <td>Fresh</td>
+            <td class="muted">"Will it go off before I use it?" — where the waste and the money actually are.</td>
+            <td class="muted">A number and a date, predicted from the plan, flagged when the week will not use it up.</td>
+          </tr>
+          <tr>
+            <td>Frozen</td>
+            <td class="muted">"What is even in there?" — the one place a real log pays for itself, because you cannot see in.</td>
+            <td class="muted">An explicit list of portions, mostly written by the planner rather than by you.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <strong>The freezer log writes itself.</strong> The planner already knows
+      Tuesday cooks eight portions and only six get eaten, so it can offer
+      "two portions of the stew — freeze them?" without anyone typing anything.
+      That is the whole thesis in miniature: the data was already there, it just
+      needed asking for at the right moment.
+    </div>
+
+    <div class="callout">
+      <strong>When in doubt, buy it.</strong> The costs here are lopsided.
+      Over-buying a bag of carrots wastes 85p; trusting a fortnight-old guess
+      and being wrong wastes the meal and the evening. So a stale figure is
+      never subtracted from the shopping list — the app would rather you had a
+      spare onion than an accurate spreadsheet.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Order of work</p>
+      <h2>Four phases</h2>
+    </div>
+    <div class="prose">
+      <p>
+        Sequenced so that each phase ships something usable on its own, and so
+        the riskiest infrastructure is built while the feature riding on it is
+        still simple.
+      </p>
+    </div>
+
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-num">01</div>
+        <div class="phase-body">
+          <h3>The spine — households, sync, lists and tasks</h3>
+          <ul>
+            <li>Google sign-in, household creation, invite your wife, row-level security</li>
+            <li>Local-first writes in the browser via IndexedDB, an outbox, merge rules, conflict tests</li>
+            <li><strong>Done:</strong> tasks and reminders — recurrence with both anchors, diary-triggered reminders, and jobs fitted into the evenings the calendar leaves</li>
+            <li>Shared shopping list, and the task list made multi-user rather than single-household-in-memory</li>
+            <li>Deployed as an installable web app — both laptops, both phones, no app store</li>
+          </ul>
+          <p class="phase-why">
+            Deliberately unglamorous. The shopping list is the highest-frequency
+            thing you will both touch and the lowest-risk place to get sync
+            wrong, so it is the right feature to discover the hard problems on.
+            Everything after this inherits the answer. The task <em>logic</em>
+            is now built and tested ahead of the sync layer, which was the
+            cheap order to do it in: the rules are pure functions and did not
+            need a database to be got right.
+          </p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">02</div>
+        <div class="phase-body">
+          <h3>Meal planning and the larder</h3>
+          <ul>
+            <li>Ingredient catalogue and recipe tables in Postgres</li>
+            <li>The planner Edge Function — already prototyped, see below</li>
+            <li>The larder: derived stock, staleness, the freezer log</li>
+            <li>Plan review screen: swap a meal, regenerate a day, accept</li>
+          </ul>
+          <p class="phase-why">
+            Most of this exists and runs. What remains is moving it from an
+            in-memory prototype onto Postgres, and filling out the catalogue —
+            data entry rather than invention.
+          </p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">03</div>
+        <div class="phase-body">
+          <h3>The family agenda</h3>
+          <ul>
+            <li><strong>Done:</strong> Google Calendar read, per-person profiles, and the week's table — who is in for dinner, who cooks, and how long they have — proposed from the calendars and corrected by hand</li>
+            <li>School and club ICS feed subscriptions alongside the Google calendars</li>
+            <li>One merged week view with per-person colour</li>
+            <li>Clash detection, and a plain-English summary of the week ahead</li>
+            <li>Move the calendar read server-side, so the agenda refreshes overnight rather than only while somebody has the app open</li>
+          </ul>
+          <p class="phase-why">
+            Brought forward, because the Google setup was done and the payoff was
+            sitting right there. The rest of this phase is breadth — more
+            calendars, a nicer view — rather than the hard part.
+          </p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">04</div>
+        <div class="phase-body">
+          <h3>Money, at category level</h3>
+          <ul>
+            <li>Bank connection via an Open Banking provider, read-only</li>
+            <li>Transactions sorted into categories — groceries, eating out, fuel, clubs and lessons, utilities — with corrections that stick</li>
+            <li>Spend per category per month, quarter and year, and the comparison between them</li>
+          </ul>
+          <p class="phase-why">
+            Deliberately coarse, and much easier than it first looked. The
+            question is "what did we spend on food this quarter, and is that
+            more than last?" — not "what did the tin of tomatoes cost". So there
+            is no receipt scanning, no itemisation and no dependency on a
+            supermarket API. Bank data already carries merchant, amount and
+            date, which is everything a category total needs. Still last,
+            because it is the only phase whose access you do not fully control.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Leaving room for "probably more".</strong> Keep every phase to the
+      same shape — a table or two, an Edge Function, a screen, and rows carrying
+      <code>household_id</code>. A future module (chores, medication, the dog's
+      vet dates) should then be additive rather than surgical.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Prototype</p>
+      <h2>What the meal-planning spike settled</h2>
+    </div>
+    <div class="prose">
+      <p>
+        Built and running in <code>prototypes/meal-plan</code>, now with a web
+        front end at <code>npm run web</code>. The premise was that the hard part
+        is not getting a model to write an appealing menu — that is easy — but
+        turning that menu into a shopping list that is actually correct, and
+        cooking it on the evenings the family actually has, for the people who
+        are actually there. It now carries the jobs list too, for the same
+        reason: the difficulty there is not storing a to-do, it is knowing when
+        the next one is due and whether the week has room for it. A hundred and
+        sixty tests, all passing, none of which need an API key, because the
+        parts most likely to be wrong are the deterministic ones.
+      </p>
+    </div>
+
+    <div class="split">
+      <div class="panel proved">
+        <h3><span class="chip settled">Proved</span></h3>
+        <ul>
+          <li><strong>Hallucinated ingredients are structurally impossible.</strong> The response schema constrains <code>ingredientId</code> to an enum of catalogue ids, so the model selects rather than invents. This is the single highest-leverage decision in the whole pipeline.</li>
+          <li><strong>Units reconcile.</strong> "2 tbsp olive oil" and "60 ml", "2 onions" and "200 g" collapse into one line via per-ingredient density and unit mass — and a conversion that cannot be done fails loudly instead of producing a plausible wrong number.</li>
+          <li><strong>Pack sizes beat rounding up.</strong> 800&nbsp;g of chicken is three 300&nbsp;g packs, not one 650&nbsp;g plus one 300&nbsp;g — 50&nbsp;g less left over. With prices gone the solver minimises what ends up in the bin instead, and ties break towards fewer packs to carry.</li>
+          <li><strong>Leftovers are cooked twice and bought once.</strong></li>
+          <li><strong>Bad plans do not reach the family.</strong> A deliberately broken week trips nine distinct violations — a nut allergy, a four-hour braise on a Wednesday, chicken four nights, a missing Sunday — each with a repair instruction written for the model to act on.</li>
+          <li><strong>The larder works end to end.</strong> Confirming six carrots flips them from stale to trusted and drops them straight off the shopping list, live, in the browser.</li>
+          <li><strong>The model is genuinely swappable.</strong> Claude and Gemini sit behind one interface with a schema-dialect translator between them. The planner now runs its full loop against a fake provider with no SDK and no network at all, which is the proof that the seam is real rather than aspirational.</li>
+          <li><strong>One domain layer serves both sides.</strong> The web app computes nothing itself — every figure on screen comes from the same TypeScript modules an Edge Function would call. That was the argument for going web-first; it now has a working demonstration rather than a paragraph.</li>
+          <li><strong>The calendar changes what gets cooked.</strong> Each evening gets its own budget from the longest free stretch between commitments, so a Monday with a school run at 17:00 and a call until 20:30 reports zero minutes and rejects the 45-minute traybake by name. The blanket "45 minutes on a weeknight" rule is now only the fallback for households with no calendar connected.</li>
+          <li><strong>Time zones are handled properly.</strong> Wall-clock times are read in the household's zone rather than the server's, so British Summer Time does not silently hand everyone an extra hour of cooking for half the year.</li>
+          <li><strong>Recurrence knows what it is measuring from.</strong> Bin day is fixed by the council and putting them out late does not move next week; clean sheets restart their fortnight from when you actually did them. One rule for both is the ordinary bug here, and it is the reason people stop trusting a chore app. Missed fixed occurrences roll forward rather than stacking, so three skipped bin days read as "last Tuesday", not "twenty-one days late".</li>
+          <li><strong>Reminders can hang off the diary instead of a date.</strong> "Pack the swimming kit" fires the evening before whatever the calendar calls swimming, and says nothing at all the week the lesson is off. A weekly repeat would have nagged regardless — which is precisely how people learn to dismiss reminders without reading them.</li>
+          <li><strong>The household is people, not a portion count.</strong> Each person has a profile — age bracket, allergies, likes and dislikes, whether they can cook, and optionally a Google account. Portion size and cooking ability are <em>derived</em> from the bracket and then overridable, because asking a parent to type a portion multiplier for a toddler is the kind of question that gets an app closed. A teenager eats more than an adult and a baby eats nothing from the pot; both fall out of the same table.</li>
+          <li><strong>Being busy is not the same as being absent.</strong> The obvious rule — their calendar covers dinner, so they are out — is wrong in the way that costs trust: a work call from 18:00 to 20:30 blocks the whole evening while the person sits at home, hungry, in the next room. Busy means somebody cannot <em>cook</em>; it says nothing about whether they will <em>eat</em>. The two are answered separately, so a blocked evening takes you off the rota and leaves you at the table. Absence has to be stated — an all-day entry that puts you elsewhere, or a meal plainly somewhere else — never inferred from a full diary.</li>
+          <li><strong>Portions follow who is actually in.</strong> The Thursday one child is at a friend's house is 2.6 portions, not 3.2, and the shopping list is smaller by exactly that much. The cooking limit belongs to the <em>person cooking</em> rather than to the evening, which is the only version that makes sense — one adult being out until eight says nothing about the other adult's ability to cook at six. And an evening with nobody free to cook is a real answer the planner is given, because the right response is the freezer, not a faster recipe.</li>
+          <li><strong>A correction outlives the calendar that contradicts it.</strong> The grid is a proposal: the calendars fill it in, the family overrides whatever it got wrong, and overrides are stored as a separate layer rather than as edits in place. A refresh that disagrees loses. Verified by re-reading a calendar that had newly marked a child away and watching the human "she's coming home" survive it — with a one-click way to hand the cell back.</li>
+          <li><strong>The week's jobs are fitted, not just listed.</strong> Each evening's spare time is measured as a <em>total</em> rather than the longest stretch, because ten minutes before the school run and ten after really is twenty minutes of tidying — while cooking, which cannot be interrupted, still gets the unbroken run. Dinner comes out of one person's evening rather than both, the cooking rota alternates, and unassigned jobs go to whoever has the most left. Work that will not fit anywhere is stated plainly instead of rolling to tomorrow forever.</li>
+        </ul>
+      </div>
+
+      <div class="panel unproved">
+        <h3><span class="chip open">Still unknown</span></h3>
+        <ul>
+          <li><strong>How often the repair loop is needed.</strong> If most plans pass first time it is cheap; if most need two rounds, the constraints want loosening or the prompt wants work. Not worth blocking on — a model writing a decent week is already established ground — but worth watching once real weeks start running.</li>
+          <li><strong>Real cost and latency per plan.</strong> The runner prints token counts and a cost estimate; the numbers just need collecting. Back-of-envelope is around three cents a week per household, but that is arithmetic, not a measurement.</li>
+          <li><strong>Whether caching engages at all.</strong> Explicit caching is not offered on the Interactions API, so the rules and catalogue are merely placed first and left to implicit caching. The runner reports the cache hit rate; if it sits at zero, the prompt is being paid for in full every week.</li>
+          <li><strong>Whether the Sunday-night review actually gets done.</strong> The whole grid rests on somebody spending two minutes confirming it once a week. If that does not happen the app falls back to the calendars' guess, which is decent but not right — and a plan built on a stale guess is exactly the kind of thing that gets quietly abandoned. Worth watching whether the review is a pleasant ritual or a chore, because the answer changes how much the week should depend on it.</li>
+          <li><strong>How to read a second person's calendar.</strong> Each profile can hold a Google account, and one signed-in account fills its own row. Filling everyone's row means either every adult signing in on their own device, or shared calendars — and children mostly do not have calendars at all, so their rows will stay hand-set. The design handles all three, but which one a real family tolerates is not yet known.</li>
+          <li><strong>Whether anyone tolerates being scheduled.</strong> The app now has an opinion about which evening you hoover on. That is either the most useful thing it does or the most irritating, and no amount of design settles which — it needs a fortnight of being ignored or followed. The escape hatches are built in (defer a day, or simply do it whenever) but the honest position is that this is a behavioural bet, not a solved problem.</li>
+          <li><strong>Whether losing the budget check costs anything.</strong> Frugality is now a sentence in the prompt rather than a rule in code. That is the honest trade — a budget assertion built on prices we cannot trust would fail plans for the wrong reason — but it does mean one fewer guard rail, and only real weeks will show whether the model needs the discipline.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      Run <code>npm run web</code> for the browser version, or
+      <code>npm run demo</code> for the same week in a terminal.
+      <code>npm run guardrails</code> watches a bad plan get taken apart.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Risk register</p>
+      <h2>What could still go wrong</h2>
+    </div>
+    <div class="scroller">
+      <table>
+        <caption>Ordered by how much rework the risk causes if it lands late</caption>
+        <thead>
+          <tr>
+            <th scope="col">Risk</th>
+            <th scope="col">Status</th>
+            <th scope="col">Where it stands</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Larder drifts out of trust</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">The real test is whether anyone confirms anything after week three. Designed against — nothing breaks when the larder is ignored, it simply goes stale and buys the items — but only living with it will show whether the confirm prompt lands at a moment anyone is willing to answer.</td>
+          </tr>
+          <tr>
+            <td>Web app on iOS</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">Installable web apps are second-class citizens on iPhone: notifications are limited and the install flow is obscure. Fine for a laptop-first tool used by two people who can be told how; the thing most likely to eventually justify a native app.</td>
+          </tr>
+          <tr>
+            <td>No Android toolchain</td>
+            <td><span class="chip settled">Deferred</span></td>
+            <td class="muted">Still no JDK, Gradle or Android Studio on this machine. No longer blocking anything, because the first client is a web app — this only matters again if and when the native decision is revisited.</td>
+          </tr>
+          <tr>
+            <td>Offline sync on Supabase</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">The largest design risk. Mitigation is designed but unbuilt: local-first writes, an outbox, and merge rules chosen per table. Build it in Phase&nbsp;1 while the only client is a shopping list.</td>
+          </tr>
+          <tr>
+            <td>Compose Multiplatform on iPadOS</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">Production-viable on iPhone; large-screen adaptive layouts are the weak spot. Prove it with one real screen early rather than discovering it at Phase&nbsp;3.</td>
+          </tr>
+          <tr>
+            <td>Open Banking eligibility</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">UK aggregators differ on whether an individual developer can hold a live connection or whether a regulated entity is required. Confirm terms with a provider before Phase&nbsp;4 is scoped — do not assume.</td>
+          </tr>
+          <tr>
+            <td>Grocery price data</td>
+            <td><span class="chip settled">Dropped</span></td>
+            <td class="muted">Was the second-worst risk in this register: no supported UK supermarket price API, unofficial endpoints that break without warning. Removing prices from the design removed the risk outright. The list now says what to put in the trolley, not what it will cost.</td>
+          </tr>
+          <tr>
+            <td>Model invents ingredients</td>
+            <td><span class="chip settled">Closed</span></td>
+            <td class="muted">Enum-constrained schema. Cannot happen.</td>
+          </tr>
+          <tr>
+            <td>Wrong quantities on the list</td>
+            <td><span class="chip settled">Closed</span></td>
+            <td class="muted">Unit reconciliation and pack solving are implemented and tested, and refuse to guess when a conversion is impossible.</td>
+          </tr>
+          <tr>
+            <td>An allergen reaching the table</td>
+            <td><span class="chip settled">Closed</span></td>
+            <td class="muted">Checked in deterministic code against every ingredient of every recipe, not left to the prompt.</td>
+          </tr>
+          <tr>
+            <td>Google on the critical path</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">Login, calendar and meal planning now all depend on one vendor and one Cloud project. Accepted deliberately for the simplicity; mitigated by keeping the model call behind a thin interface, since validation and the shopping-list engine are already provider-agnostic.</td>
+          </tr>
+          <tr>
+            <td>Prompt caching</td>
+            <td><span class="chip open">Open</span></td>
+            <td class="muted">Explicit caching is not available on the Interactions API. The stable rules and catalogue are placed first so implicit caching <em>can</em> match, but that is a hope with a meter on it rather than a guarantee. Measure before assuming.</td>
+          </tr>
+          <tr>
+            <td>AI running cost</td>
+            <td><span class="chip settled">Closed</span></td>
+            <td class="muted">One plan per household per week on a Flash-tier model at $0.75 in / $3.75 out per million tokens. Small change even if caching never engages and every plan needs two repairs.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Next</p>
+      <h2>Five things, in this order</h2>
+    </div>
+    <div class="actions">
+      <div class="action">
+        <span class="action-num">01</span>
+        <span>Run <code>npm run web</code> and actually use it for a week — the shop and the jobs. The question is not whether it works, it does, but whether either of you confirms anything in the larder after day three, or does the job on the evening it was put on.</span>
+        <span class="action-note">the real test</span>
+      </div>
+      <div class="action">
+        <span class="action-num">02</span>
+        <span>Create the Supabase project, and sketch the <code>household</code>, <code>person</code>, <code>list_item</code> and <code>task</code> tables with row-level security. <code>person</code> needs a nullable link to an auth user, since most profiles will never sign in. Do this before the next one — its callback URL is built from the project reference.</span>
+        <span class="action-note">starts phase 1</span>
+      </div>
+      <div class="action">
+        <span class="action-num">03</span>
+        <span><s>Set up Google Cloud for Calendar access</s> — done, and <a href="https://claude.ai/code/artifact/98756a60-ea6d-4689-a57e-551602a1cbe8">the runbook</a> is kept for when the second household member signs in.</span>
+        <span class="action-note">complete</span>
+      </div>
+      <div class="action">
+        <span class="action-num">04</span>
+        <span>Agree the merge rules for a shared list — including what happens when one of you deletes an item the other has just ticked.</span>
+        <span class="action-note">decide before coding</span>
+      </div>
+      <div class="action">
+        <span class="action-num">05</span>
+        <span>Email an Open Banking provider and ask, plainly, whether a household of two can hold a live connection.</span>
+        <span class="action-note">phase 4, but slow</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">
+    Revision 7 &middot; profiles, and a week the family confirms rather than
+    accepts &middot; 160 tests passing &middot; run it with <code>npm run web</code>
+  </p>
+
+</div>

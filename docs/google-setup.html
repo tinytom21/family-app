@@ -1,0 +1,566 @@
+<title>Google Cloud Runbook</title>
+
+<style>
+  :root {
+    --ground:      #F3F4F1;
+    --surface:     #FBFBFA;
+    --surface-alt: #EAECE7;
+    --ink:         #161C19;
+    --ink-soft:    #56605A;
+    --ink-faint:   #7C857F;
+    --rule:        #D6DAD4;
+    --rule-strong: #B9BFB8;
+    --accent:      #1F6B57;
+    --accent-soft: #DCEAE4;
+    --warn:        #9A5A16;
+    --warn-soft:   #F3E6D4;
+    --stop:        #9E3B2B;
+    --stop-soft:   #F5DFDA;
+    --shadow: 0 1px 2px rgba(22, 28, 25, .05);
+
+    --sans: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui,
+            -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101513;
+      --surface:     #161C19;
+      --surface-alt: #1C2320;
+      --ink:         #E3E8E4;
+      --ink-soft:    #99A39C;
+      --ink-faint:   #78827B;
+      --rule:        #29312C;
+      --rule-strong: #3A443E;
+      --accent:      #63C1A5;
+      --accent-soft: #17302A;
+      --warn:        #DFA45E;
+      --warn-soft:   #302517;
+      --stop:        #E28372;
+      --stop-soft:   #33201C;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #101513;
+    --surface:     #161C19;
+    --surface-alt: #1C2320;
+    --ink:         #E3E8E4;
+    --ink-soft:    #99A39C;
+    --ink-faint:   #78827B;
+    --rule:        #29312C;
+    --rule-strong: #3A443E;
+    --accent:      #63C1A5;
+    --accent-soft: #17302A;
+    --warn:        #DFA45E;
+    --warn-soft:   #302517;
+    --stop:        #E28372;
+    --stop-soft:   #33201C;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 48rem; margin: 0 auto; }
+  .prose { max-width: 34rem; }
+
+  h1, h2, h3 { font-family: var(--sans); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(1.9rem, 4.5vw, 2.6rem); font-weight: 700; letter-spacing: -.026em; line-height: 1.08; }
+  h2 { font-size: 1.02rem; font-weight: 690; letter-spacing: -.01em; }
+  p { margin: 0; }
+  a { color: var(--accent); text-underline-offset: .18em; }
+  code {
+    font-family: var(--mono); font-size: .82em;
+    background: var(--surface-alt); padding: .1em .34em; border-radius: 3px;
+    overflow-wrap: anywhere;
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+
+  header {
+    display: flex; flex-direction: column; gap: 1rem;
+    padding: 4rem 0 2rem; border-bottom: 2px solid var(--ink);
+  }
+  header .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 34rem; }
+
+  section { padding: 2.6rem 0 0; display: flex; flex-direction: column; gap: 1rem; }
+  section > * { min-width: 0; }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border-radius: 0 4px 4px 0; padding: 1rem 1.2rem;
+    font-size: .96rem; max-width: 40rem;
+    display: flex; flex-direction: column; gap: .5rem;
+  }
+  .note.stop { background: var(--stop-soft); border-left: 3px solid var(--stop); }
+  .note.warn { background: var(--warn-soft); border-left: 3px solid var(--warn); }
+  .note.good { background: var(--accent-soft); border-left: 3px solid var(--accent); }
+  .note h2 { font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); font-weight: 600; }
+  .note.stop h2 { color: var(--stop); }
+  .note.warn h2 { color: var(--warn); }
+  .note.good h2 { color: var(--accent); }
+
+  /* ---------- steps ---------- */
+  .steps { display: flex; flex-direction: column; counter-reset: step; }
+  .step {
+    display: grid; grid-template-columns: 2.4rem 1fr; gap: .35rem 1rem;
+    padding: 1.25rem 0; border-top: 1px solid var(--rule);
+  }
+  .step:first-child { border-top: 1px solid var(--rule-strong); }
+  .step > * { min-width: 0; }
+  .step-num {
+    font-family: var(--mono); font-size: 1.05rem; color: var(--accent);
+    line-height: 1.4; font-variant-numeric: tabular-nums;
+  }
+  .step-body { display: flex; flex-direction: column; gap: .5rem; }
+  .step-body p { font-size: .97rem; }
+  .where {
+    font-family: var(--mono); font-size: .72rem; color: var(--ink-faint);
+    letter-spacing: .02em;
+  }
+  .paste {
+    font-family: var(--mono); font-size: .76rem;
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 4px; padding: .6rem .75rem; overflow-x: auto;
+    box-shadow: var(--shadow); white-space: pre;
+  }
+  .step.critical .step-num { color: var(--stop); }
+  .step.critical .step-body > p:first-child { font-weight: 600; }
+
+  /* ---------- tables ---------- */
+  .scroller { overflow-x: auto; }
+  table {
+    border-collapse: collapse; width: 100%; min-width: 30rem;
+    font-family: var(--sans); font-size: .87rem;
+  }
+  th, td { text-align: left; padding: .62rem .8rem .62rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 650; border-bottom: 1px solid var(--rule-strong);
+  }
+  td:first-child { font-weight: 620; }
+  tbody tr:last-child td { border-bottom: none; }
+  .muted { color: var(--ink-soft); }
+
+  ul { margin: 0; padding-left: 1.15rem; }
+  li { margin: .3rem 0; }
+
+  .footnote {
+    font-family: var(--mono); font-size: .72rem; color: var(--ink-faint);
+    padding-top: 3rem; line-height: 1.8;
+  }
+
+  @media (max-width: 34rem) {
+    body { font-size: 16px; padding: 0 1.1rem 4rem; }
+    .step { grid-template-columns: 1fr; gap: .4rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Setup runbook &middot; about 20 minutes &middot; all eight steps doable today</p>
+    <h1>Getting Google Calendar into the app</h1>
+    <p class="lede">
+      One Cloud project, one OAuth client, pasted into Supabase, then a page
+      that proves it worked. The whole thing is straightforward except for a
+      single default that will quietly break calendar sync every seven days —
+      so that one is step four, in red.
+    </p>
+  </header>
+
+  <section>
+    <div class="note stop">
+      <h2>Do not leave it in Testing</h2>
+      <p>
+        A new OAuth app starts in <strong>Testing</strong>, and Google expires
+        refresh tokens after <strong>seven days</strong> for any app in that
+        state asking for more than name and email. Calendar access counts. Left
+        alone, sync works beautifully for a week and then dies, repeatedly, in a
+        way that looks like a bug in our code.
+      </p>
+      <p>
+        The fix is one button — <strong>Publish app</strong> — and it does
+        <em>not</em> require Google to verify anything first.
+      </p>
+    </div>
+
+    <div class="note good">
+      <h2>You do not need verification</h2>
+      <p>
+        Calendar is a "sensitive" scope, which normally means a review before
+        you can ship. Google documents an explicit exception for exactly your
+        case: if an app "is used by only a few users, all of whom are known
+        personally to you", verification isn't required. You publish, everyone
+        clicks past one scary-looking screen the first time, and that is the end
+        of it.
+      </p>
+      <p>
+        The cost is cosmetic: an "unverified app" warning at first sign-in, and
+        a cap of 100 accounts you will never approach.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <p class="eyebrow" style="padding-bottom:.5rem">First</p>
+      <p>
+        Create the Supabase project before you start, or at least know its
+        reference — the URL looks like
+        <code>https://abcdefgh.supabase.co</code>. Step&nbsp;5 needs it, and
+        going back to add it later is the usual reason this takes two sittings
+        instead of one.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-body">
+          <p>Create the project.</p>
+          <p class="where">console.cloud.google.com → project picker → New project</p>
+          <p class="muted">Call it something you will recognise in a year. Note the project ID it generates; you rarely need it, but it is annoying to hunt for.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-body">
+          <p>Turn on the Calendar API.</p>
+          <p class="where">APIs &amp; Services → Library → search "Google Calendar API" → Enable</p>
+          <p class="muted">Enabling an API and being allowed to call it are separate things — this is only the first half. The permission comes from the OAuth scope in step 4.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-body">
+          <p>Fill in the consent screen.</p>
+          <p class="where">APIs &amp; Services → OAuth consent screen (newer consoles: Google Auth Platform → Branding)</p>
+          <p class="muted">
+            User type <strong>External</strong> — "Internal" only exists if you
+            pay for Google Workspace, and a personal Gmail account does not
+            count. App name, your email for support, your email for developer
+            contact. Nothing here is permanent.
+          </p>
+        </div>
+      </div>
+
+      <div class="step critical">
+        <div class="step-num">04</div>
+        <div class="step-body">
+          <p>Add the scope, then publish.</p>
+          <p class="where">Same screen → Data access / Scopes → Add or remove scopes</p>
+          <div class="paste">https://www.googleapis.com/auth/calendar.readonly</div>
+          <p class="muted">
+            Read-only is genuinely enough — the app displays the family's
+            calendars and plans around them, and asking for write access would
+            mean a harder review for a capability nothing uses.
+          </p>
+          <p>
+            Then go to <strong>Audience</strong> and press
+            <strong>Publish app</strong>. Confirm the status reads
+            <strong>In production</strong> before you move on. This is the step
+            that stops the seven-day expiry.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">05</div>
+        <div class="step-body">
+          <p>Create the OAuth client.</p>
+          <p class="where">APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Web application</p>
+          <p class="muted">
+            This page has three fields that all accept a URL, and only one of
+            them is the right one. Take the extra ten seconds here:
+          </p>
+          <table style="min-width:0">
+            <tbody>
+              <tr>
+                <td>Name</td>
+                <td class="muted">A label for your own benefit, shown to nobody. Call it "Family app web". <strong>Not</strong> a URL.</td>
+              </tr>
+              <tr>
+                <td>Authorised JavaScript origins</td>
+                <td class="muted">Origins only, no paths. Leave it empty — we do not use the flow that needs it.</td>
+              </tr>
+              <tr>
+                <td>Authorised redirect URIs</td>
+                <td class="muted"><strong>This is the one.</strong> Scroll down to it; it sits below the origins box.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="muted">Under <strong>Authorised redirect URIs</strong>, press "Add URI" and paste your Supabase callback — copy it from Supabase's Google provider page rather than typing it:</p>
+          <div class="paste">https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback</div>
+          <p class="muted">
+            Only if you also intend to run Supabase itself locally, add this
+            second one. Skip it if you are using the hosted project:
+          </p>
+          <div class="paste">http://localhost:54321/auth/v1/callback</div>
+          <p class="muted">
+            Then <strong>Save</strong>. Google can take a few minutes to
+            propagate a change here, so if it still complains immediately, wait
+            and retry before assuming it is wrong.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">06</div>
+        <div class="step-body">
+          <p>Copy <em>both</em> credentials into Supabase.</p>
+          <p class="where">Supabase dashboard → Authentication → Sign In / Providers → Google</p>
+          <p class="muted">
+            Turn the provider on, then fill in <strong>Client ID</strong> and
+            <strong>Client Secret</strong> — the field may be labelled "Client
+            IDs" in the plural, which is for native apps and takes the same
+            value here. Then press <strong>Save</strong>; the toggle alone does
+            not persist anything.
+          </p>
+          <p class="muted">
+            Getting the secret in is the step most likely to be missed, because
+            the provider will happily sit there looking enabled without it. If
+            you later see
+            <code>Unsupported provider: missing OAuth secret</code>, this is the
+            screen it means.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">07</div>
+        <div class="step-body">
+          <p>Tell Supabase where it is allowed to send people afterwards.</p>
+          <p class="where">Supabase dashboard → Authentication → URL Configuration → Redirect URLs</p>
+          <p class="muted">
+            Google sends the browser back to Supabase, and Supabase then sends
+            it on to your app — but only to addresses on this list. Add the
+            checker page from the next step:
+          </p>
+          <div class="paste">http://localhost:4321/check-google.html</div>
+          <p class="muted">
+            Wildcards work, so <code>http://localhost:4321/**</code> covers
+            local development in one entry. Skip this and the round trip fails
+            at the very last hop, which looks alarmingly like a Google problem
+            and is not one.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">08</div>
+        <div class="step-body">
+          <p>Prove it works, before writing any of the app.</p>
+          <div class="paste">cd "prototypes/meal-plan"
+npm run web</div>
+          <p class="muted">
+            Then open
+            <code>http://localhost:4321/check-google.html</code>, paste your
+            Supabase project URL and anon key, and sign in with Google. It runs
+            the real flow and tells you three things: whether you are signed in,
+            whether Google handed back a <strong>refresh token</strong>, and
+            whether that token can genuinely read your calendar — it lists your
+            next few events to prove it.
+          </p>
+          <p class="muted">
+            The refresh token is the one to watch. Everything else can look
+            perfect while it is quietly absent, and the failure only shows up an
+            hour later when the access token expires with nothing to renew it.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>That is the setup finished</h2>
+    <div class="note good">
+      <h2>The rest is code, and it is not today's job</h2>
+      <p>
+        Below is what the real app will do at sign-in. There is nowhere to put
+        it yet — we have not built the sign-in screen — so it is here for
+        reference rather than action. The checker in step 8 already does exactly
+        this, which is the point of it.
+      </p>
+    </div>
+    <div class="paste">supabase.auth.signInWithOAuth({
+  provider: 'google',
+  options: {
+    scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+    queryParams: {
+      access_type: 'offline',   // ask for a refresh token at all
+      prompt: 'consent',        // ask again even if they said yes before
+    },
+  },
+})</div>
+    <div class="prose">
+      <p style="margin-bottom:1rem">
+        Both query parameters earn their place. Without
+        <code>access_type=offline</code> you get an access token that dies in an
+        hour and nothing to renew it with. Without <code>prompt=consent</code>
+        Google returns a refresh token only on the very first authorisation
+        ever — so the second person to sign in, or anyone re-authorising,
+        silently gets none.
+      </p>
+      <p>
+        And whenever we do build that screen, the very next thing it must do is
+        write <code>provider_refresh_token</code> to a table of ours. Supabase
+        hands it over once, on the redirect, and does not keep it. Miss that
+        moment and calendar sync works only while somebody has the app open,
+        which is a thoroughly confusing bug to meet three weeks later.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What ends up where</h2>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Value</th>
+            <th scope="col">From</th>
+            <th scope="col">Goes to</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Client ID</td>
+            <td class="muted">Google Cloud → Credentials</td>
+            <td class="muted">Supabase → Auth → Google provider</td>
+          </tr>
+          <tr>
+            <td>Client secret</td>
+            <td class="muted">Google Cloud → Credentials</td>
+            <td class="muted">Supabase → Auth → Google provider</td>
+          </tr>
+          <tr>
+            <td>Callback URL</td>
+            <td class="muted">Supabase project reference</td>
+            <td class="muted">Google Cloud → authorised redirect URIs</td>
+          </tr>
+          <tr>
+            <td>Calendar scope</td>
+            <td class="muted">Consent screen, and the sign-in call</td>
+            <td class="muted">Both — they have to agree</td>
+          </tr>
+          <tr>
+            <td>Checker page URL</td>
+            <td class="muted">Your machine, once the server is running</td>
+            <td class="muted">Supabase → Auth → URL Configuration → Redirect URLs</td>
+          </tr>
+          <tr>
+            <td>Anon / publishable key</td>
+            <td class="muted">Supabase → Project Settings → API</td>
+            <td class="muted">The checker page, in your browser</td>
+          </tr>
+          <tr>
+            <td>Refresh token</td>
+            <td class="muted">The session, at sign-in</td>
+            <td class="muted">A table of ours — later, when sign-in exists</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>When it goes wrong</h2>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Symptom</th>
+            <th scope="col">Almost always</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Worked for a week, then stopped</td>
+            <td class="muted">Still in Testing. Publish the app — step 4.</td>
+          </tr>
+          <tr>
+            <td><code>missing OAuth secret</code></td>
+            <td class="muted">Supabase has Google switched on but no Client Secret stored — step 6. Nothing reached Google at all; the credentials there are fine. Paste the secret and press Save.</td>
+          </tr>
+          <tr>
+            <td>A page of raw JSON on a supabase.co address</td>
+            <td class="muted">Always a Supabase config problem rather than a Google one, because the browser never left Supabase. Read the <code>msg</code> field — it is usually precise.</td>
+          </tr>
+          <tr>
+            <td><code>redirect_uri_mismatch</code></td>
+            <td class="muted">
+              First check the callback is in <strong>Authorised redirect URIs</strong>
+              and not in the <strong>Name</strong> box or the JavaScript origins
+              box — all three take a URL and only one counts. If it is in the
+              right box, compare it character by character with Supabase's, and
+              give Google a few minutes to propagate the change.
+            </td>
+          </tr>
+          <tr>
+            <td>Bounced back to Supabase, not to the app</td>
+            <td class="muted">The app's own URL is missing from Supabase's Redirect URLs allow list — step 7, which is a different list from Google's.</td>
+          </tr>
+          <tr>
+            <td>No refresh token in the session</td>
+            <td class="muted">Missing <code>access_type=offline</code>, or missing <code>prompt=consent</code> on a repeat authorisation.</td>
+          </tr>
+          <tr>
+            <td><code>invalid_grant</code> on refresh</td>
+            <td class="muted">Token revoked, unused for six months, or the seven-day expiry again.</td>
+          </tr>
+          <tr>
+            <td>"Google hasn't verified this app"</td>
+            <td class="muted">Expected and fine. Advanced → Go to (app name). Once per person.</td>
+          </tr>
+          <tr>
+            <td>"Access blocked: app is in testing"</td>
+            <td class="muted">Someone signing in who is not a test user, while the app is unpublished. Publishing fixes it for everyone.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="note warn">
+      <h2>Gemini stays separate</h2>
+      <p>
+        The key you already use for meal plans authenticates <em>you</em> to a
+        model. The credential above authenticates <em>a family member</em> to
+        their own calendar. They cannot substitute for each other, and there is
+        no need to move your existing key into this project — one vendor and one
+        bill was the tidiness argument, not one credential.
+      </p>
+    </div>
+  </section>
+
+  <p class="footnote">
+    Verified against Google's OAuth documentation, August 2026 &middot;
+    console wording drifts, the sequence does not
+  </p>
+
+</div>

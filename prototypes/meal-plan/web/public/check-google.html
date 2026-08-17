@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Check Google setup</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/check-google.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔑</text></svg>">
+</head>
+<body class="check">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Check Google setup</h1>
+        <p class="brand-sub">proves steps 1–6 of the runbook actually worked</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" id="signout" class="btn" hidden>Sign out</button>
+      <a class="btn" href="/">Back to the week</a>
+    </div>
+  </div>
+</header>
+
+<main class="check-page">
+
+  <section class="panel" id="setup-panel">
+    <h2>1. Point this at your Supabase project</h2>
+    <p class="hint">
+      Both values live in your Supabase dashboard under
+      <strong>Project Settings → API</strong>. The anon key is designed to sit
+      in a browser, so pasting it here is fine. They are kept in this browser
+      only and never sent anywhere but your own project.
+    </p>
+    <label class="field">
+      <span>Project URL</span>
+      <input type="url" id="supabase-url" placeholder="https://abcdefgh.supabase.co" spellcheck="false" autocomplete="off">
+    </label>
+    <label class="field">
+      <span>Anon / publishable key</span>
+      <input type="text" id="supabase-key" placeholder="sb_publishable_… or eyJ…" spellcheck="false" autocomplete="off">
+    </label>
+
+    <div class="callout-inline">
+      <p><strong>Before you sign in</strong>, add this exact URL to Supabase →
+      Authentication → URL Configuration → <strong>Redirect URLs</strong>.
+      Without it the round trip fails at the last step.</p>
+      <div class="copyrow">
+        <code id="redirect-url">…</code>
+        <button type="button" class="mini" id="copy-redirect">Copy</button>
+      </div>
+    </div>
+
+    <button type="button" id="signin" class="btn btn-primary" disabled>
+      Sign in with Google
+    </button>
+    <p class="hint" id="signin-hint">Fill in both fields to enable this.</p>
+  </section>
+
+  <section class="panel" id="results-panel" hidden>
+    <h2>2. What came back</h2>
+    <ul class="checks" id="checks"></ul>
+
+    <div id="events-block" hidden>
+      <h3 class="subhead">Next few events on the primary calendar</h3>
+      <ul class="events" id="events"></ul>
+    </div>
+
+    <div id="verdict" class="verdict"></div>
+  </section>
+
+  <section class="panel" id="next-panel" hidden>
+    <h2>3. What this means for the app</h2>
+    <p class="hint">
+      The refresh token above is the thing worth keeping. Supabase hands it over
+      once, on this redirect, and does not store it for you — so when we build
+      the real sign-in, the very next thing it does is write that token to a
+      table. Miss it and calendar sync only works while somebody has the app
+      open, which is a miserable bug to find later.
+    </p>
+    <p class="hint">
+      Nothing else here needs doing today. Steps 7 and 8 of the runbook are code
+      that belongs in an app we have not built yet; this page stands in for them
+      so the console work can be verified now rather than in three weeks.
+    </p>
+  </section>
+
+</main>
+
+<script src="/vendor/supabase.js"></script>
+<script type="module" src="/check-google.js"></script>
+</body>
+</html>

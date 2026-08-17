@@ -1,0 +1,64 @@
+# Build the hosted demo and publish it to GitHub Pages.
+#
+# The tests run first and the deploy depends on them, so a broken domain layer
+# never reaches the demo — the whole argument of this project is that the
+# arithmetic is right, and a published page that gets the shopping list wrong
+# would be worse than no published page.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototypes/meal-plan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: prototypes/meal-plan/package-lock.json
+
+      - run: npm ci
+
+      # No API key here on purpose: every one of these must pass without a
+      # model, which is the point of testing the deterministic parts.
+      - name: Test
+        run: npm test
+
+      - name: Build the demo
+        run: npm run build:static
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

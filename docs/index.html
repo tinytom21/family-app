@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Family app</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏠</text></svg>">
+<style>
+  :root {
+    --ground:      #F3F4F1;
+    --surface:     #FBFBFA;
+    --surface-alt: #EAECE7;
+    --ink:         #161C19;
+    --ink-soft:    #56605A;
+    --ink-faint:   #7C857F;
+    --rule:        #D6DAD4;
+    --rule-strong: #B9BFB8;
+    --accent:      #1F6B57;
+    --accent-soft: #DCEAE4;
+    --open:        #9A5A16;
+    --open-soft:   #F3E6D4;
+    --shadow: 0 1px 2px rgba(22, 28, 25, .06);
+    --sans: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui,
+            -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101513;
+      --surface:     #161C19;
+      --surface-alt: #1C2320;
+      --ink:         #E3E8E4;
+      --ink-soft:    #99A39C;
+      --ink-faint:   #78827B;
+      --rule:        #29312C;
+      --rule-strong: #3A443E;
+      --accent:      #63C1A5;
+      --accent-soft: #17302A;
+      --open:        #DFA45E;
+      --open-soft:   #302517;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #101513;
+    --surface:     #161C19;
+    --surface-alt: #1C2320;
+    --ink:         #E3E8E4;
+    --ink-soft:    #99A39C;
+    --ink-faint:   #78827B;
+    --rule:        #29312C;
+    --rule-strong: #3A443E;
+    --accent:      #63C1A5;
+    --accent-soft: #17302A;
+    --open:        #DFA45E;
+    --open-soft:   #302517;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 3.5rem 1.5rem 5rem; }
+
+  .mark { width: 10px; height: 30px; border-radius: 2px; background: var(--accent); }
+  h1 { font-size: 1.9rem; letter-spacing: -.022em; margin: 1.1rem 0 .4rem; }
+  .lede { font-size: 1.05rem; color: var(--ink-soft); margin: 0 0 .5rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0;
+  }
+
+  .cards { display: grid; gap: .85rem; margin: 2.4rem 0 0; }
+  a.card {
+    display: block;
+    padding: 1.1rem 1.2rem;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-strong);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    text-decoration: none;
+    color: inherit;
+  }
+  a.card:hover { border-left-color: var(--accent); }
+  a.card.primary { border-left-color: var(--accent); background: var(--accent-soft); }
+  .card h2 { font-size: 1rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-soft); }
+  .card .tag {
+    display: inline-block;
+    font-family: var(--mono); font-size: .6rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent);
+    border: 1px solid currentColor; border-radius: 2px;
+    padding: .05rem .3rem; margin-left: .45rem; vertical-align: .1em;
+  }
+
+  .note {
+    margin-top: 2.4rem; padding: .9rem 1.05rem;
+    background: var(--open-soft); color: var(--open);
+    border-radius: 5px; font-size: .88rem;
+  }
+  .note strong { font-weight: 650; }
+
+  footer {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: .7rem; color: var(--ink-faint);
+  }
+  footer a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mark" aria-hidden="true"></div>
+  <p class="eyebrow">Prototype</p>
+  <h1>Family app</h1>
+  <p class="lede">
+    One app to replace the pile of apps: meal planning that knows who is at the
+    table, a larder that fills itself in, jobs that fit the evenings you
+    actually have, and a shopping list you can trust.
+  </p>
+
+  <div class="cards">
+    <a class="card primary" href="app/">
+      <h2>Try the demo <span class="tag">live</span></h2>
+      <p>
+        The whole thing, running in your browser. Set up profiles, tick who is
+        in for dinner, confirm what is in the cupboard, and watch the shopping
+        list change underneath you. Nothing is sent anywhere — state lives in
+        this browser and the Start over button clears it.
+      </p>
+    </a>
+
+    <a class="card" href="plan.html">
+      <h2>The build plan</h2>
+      <p>
+        Stack decisions and why, the architecture, the larder and tasks
+        designs, four phases, and an honest register of what could still go
+        wrong.
+      </p>
+    </a>
+
+    <a class="card" href="google-setup.html">
+      <h2>Google Calendar runbook</h2>
+      <p>
+        Eight steps to wire Calendar access through Supabase auth, including
+        the two that catch everybody out.
+      </p>
+    </a>
+  </div>
+
+  <p class="note">
+    <strong>The demo has no model behind it.</strong> Generating a meal plan or
+    reading a brain-dump into jobs needs an API key, and a key shipped to a web
+    page is a key given away. So those two buttons are disabled here. Everything
+    else — profiles, the week's table, the larder, the jobs scheduler, the pack
+    solver — is the real code, running the same modules the server does. Clone
+    the repo and set a key to see the AI half.
+  </p>
+
+  <footer>
+    <a href="https://github.com/tinytom21/family-app">Source on GitHub</a>
+  </footer>
+
+</div>
+</body>
+</html>
