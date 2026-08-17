@@ -111,13 +111,29 @@ function checkConfig({ url, anonKey }) {
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) {
     throw new Error(`Supabase URL looks wrong: ${url}`);
   }
-  // Supabase JWTs carry their role in the payload. A service_role key grants
-  // unrestricted access to every row in the database and bypasses RLS
-  // entirely; publishing one would hand the whole thing away.
+  // Supabase has two key formats and both have a publishable half and a secret
+  // half. The secret half bypasses RLS completely and can read and write every
+  // row in the database, so publishing one hands the whole thing away.
+  //
+  //   new     sb_publishable_...   safe    sb_secret_...        never
+  //   legacy  role: "anon"         safe    role: "service_role" never
+  //
+  // Checked by prefix *and* by JWT payload, because a guard that only knew
+  // about one format would wave the other one straight through.
+  if (/^sb_secret_/.test(anonKey)) {
+    throw new Error(
+      "Refusing to build: that is a secret key. Use the publishable one (sb_publishable_…).",
+    );
+  }
   const payload = decodeJwtPayload(anonKey);
   if (payload?.role && payload.role !== "anon") {
     throw new Error(
       `Refusing to build: that key has role "${payload.role}". Only the anon / publishable key may be published.`,
+    );
+  }
+  if (!/^sb_publishable_/.test(anonKey) && !payload) {
+    throw new Error(
+      "Refusing to build: that key is neither a JWT nor an sb_publishable_ key, so its privileges cannot be checked.",
     );
   }
   return { url, anonKey };
