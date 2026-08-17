@@ -858,7 +858,7 @@ function supabaseCreds() {
 
 function sendToChecker(message) {
   setStatus(`${message} Opening the setup page…`, true);
-  setTimeout(() => (location.href = "/check-google.html"), 1600);
+  setTimeout(() => (location.href = "../check-google.html"), 1600);
 }
 
 async function connectCalendar(state) {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>The week — family app spike</title>
-  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="app.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏠</text></svg>">
 </head>
 <body>
@@ -173,7 +173,11 @@
 
 </main>
 
-<script src="/vendor/supabase.js"></script>
-<script type="module" src="/app.js"></script>
+<!-- The bundled app, present only in the published build. When it loads it
+     installs window.__familyApi and the client talks to it instead of a
+     server; locally it is a deliberate no-op and the client uses fetch. -->
+<script src="family-app.js"></script>
+<script src="../vendor-supabase.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

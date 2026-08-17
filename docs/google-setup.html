@@ -356,15 +356,36 @@
           <p class="where">Supabase dashboard → Authentication → URL Configuration → Redirect URLs</p>
           <p class="muted">
             Google sends the browser back to Supabase, and Supabase then sends
-            it on to your app — but only to addresses on this list. Add the
-            checker page from the next step:
+            it on to your app — but only to addresses on this list. Two entries
+            cover everything: local development, and the published site.
           </p>
-          <div class="paste">http://localhost:4321/check-google.html</div>
+          <div class="paste">http://localhost:4321/**
+https://tinytom21.github.io/family-app/**</div>
           <p class="muted">
-            Wildcards work, so <code>http://localhost:4321/**</code> covers
-            local development in one entry. Skip this and the round trip fails
-            at the very last hop, which looks alarmingly like a Google problem
-            and is not one.
+            Scope the second one to the project path rather than to
+            <code>https://tinytom21.github.io/**</code>. The broad version would
+            silently authorise every other project you ever publish on that
+            domain, which is a lot of trust to hand out for one line of
+            convenience. <code>**</code> spans slashes, so the entry above
+            already covers <code>/family-app/check-google.html</code> and
+            everything under <code>/family-app/app/</code>.
+          </p>
+          <div class="note warn">
+            <h2>github.io, not github.com</h2>
+            <p>
+              These look nearly identical and are entirely different machines.
+              <code>github.com/tinytom21/family-app</code> is where the
+              <em>source</em> lives — a page on GitHub's own site, which never
+              runs your app and can never be a valid redirect target.
+              <code>tinytom21.github.io/family-app</code> is where the app is
+              actually <em>served</em>. Only the second one belongs on this
+              list, and an entry pointing at the first will simply never match
+              anything.
+            </p>
+          </div>
+          <p class="muted">
+            Skip this step and the round trip fails at the very last hop, which
+            looks alarmingly like a Google problem and is not one.
           </p>
         </div>
       </div>
@@ -373,12 +394,22 @@
         <div class="step-num">08</div>
         <div class="step-body">
           <p>Prove it works, before writing any of the app.</p>
+          <p class="muted">
+            The checker is published alongside this page, so there is nothing
+            to install:
+          </p>
+          <div class="paste">https://tinytom21.github.io/family-app/check-google.html</div>
+          <p class="muted">
+            Or run it locally, which is the same page from the same source:
+          </p>
           <div class="paste">cd "prototypes/meal-plan"
 npm run web</div>
           <p class="muted">
             Then open
-            <code>http://localhost:4321/check-google.html</code>, paste your
-            Supabase project URL and anon key, and sign in with Google. It runs
+            <code>http://localhost:4321/check-google.html</code>. Either way,
+            paste your Supabase project URL and anon key and sign in with
+            Google — the page shows the exact redirect URL it will use, which is
+            the one that has to be on the list from step 7. It runs
             the real flow and tells you three things: whether you are signed in,
             whether Google handed back a <strong>refresh token</strong>, and
             whether that token can genuinely read your calendar — it lists your

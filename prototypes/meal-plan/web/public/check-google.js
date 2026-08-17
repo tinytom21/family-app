@@ -17,7 +17,7 @@ import {
   fail,
   sessionChecks,
   verdict,
-} from "/check-logic.js";
+} from "./check-logic.js";
 
 const $ = (id) => document.getElementById(id);
 const STORE = "family-app.supabase";

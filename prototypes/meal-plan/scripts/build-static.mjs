@@ -15,13 +15,14 @@
  */
 
 import { build } from "esbuild";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
-const out = join(root, "..", "..", "docs", "app");
+const docs = join(root, "..", "..", "docs");
+const out = join(docs, "app");
 
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
@@ -45,34 +46,26 @@ const result = await build({
    copied rather than re-bundled so both hosts run identical bytes. */
 await cp(
   join(root, "node_modules/@supabase/supabase-js/dist/umd/supabase.js"),
-  join(out, "vendor-supabase.js"),
+  join(docs, "vendor-supabase.js"),
 );
 
-/* ---- the rendering client and its markup ---- */
+/* The client and the setup checker, copied across untouched.
+ *
+ * Untouched is the point. An earlier version of this script rewrote absolute
+ * paths on the way past, which worked right up until it missed one — the
+ * checker's `import "/check-logic.js"` — and shipped a page that 404'd only
+ * when hosted under a subpath, never locally. The layout under web/public now
+ * matches the layout under docs/ exactly, every path in it is relative, and
+ * this step copies rather than edits. What runs locally is what gets served.
+ */
+await cp(join(root, "web/public/app"), out, { recursive: true });
 for (const file of [
-  "index.html",
-  "app.css",
-  "app.js",
   "check-google.html",
   "check-google.css",
   "check-google.js",
   "check-logic.js",
 ]) {
-  await cp(join(root, "web/public", file), join(out, file));
-}
-
-/* The local server serves Supabase from node_modules at /vendor/supabase.js;
-   on Pages the app lives under a subpath, so the reference becomes relative. */
-for (const file of ["index.html", "check-google.html"]) {
-  const path = join(out, file);
-  let html = await readFile(path, "utf8");
-  html = html.replace("/vendor/supabase.js", "vendor-supabase.js");
-  html = html.replace("/app.css", "app.css").replace("/app.js", "app.js");
-  html = html.replace(
-    "</head>",
-    '  <script src="family-app.js"></script>\n</head>',
-  );
-  await writeFile(path, html, "utf8");
+  await cp(join(root, "web/public", file), join(docs, file));
 }
 
 /* ---- the check that matters ---- */

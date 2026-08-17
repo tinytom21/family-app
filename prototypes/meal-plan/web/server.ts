@@ -96,8 +96,9 @@ const server = createServer(async (req, res) => {
     }
 
     /* The Supabase browser bundle, served from node_modules rather than a CDN
-       so the checker works on a train and nothing phones home. */
-    if (path === "/vendor/supabase.js" && req.method === "GET") {
+       so the checker works on a train and nothing phones home. Named to match
+       where the published build puts it, so one relative path serves both. */
+    if (path === "/vendor-supabase.js" && req.method === "GET") {
       const bundle = join(
         fileURLToPath(new URL("..", import.meta.url)),
         "node_modules/@supabase/supabase-js/dist/umd/supabase.js",
@@ -111,9 +112,31 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    /* The published build ships a bundled copy of the app here, which the
+       client uses instead of this server. Locally there is a server, so the
+       page asks for the same file and gets nothing — served explicitly rather
+       than 404'd, so the console stays clean and the markup stays identical
+       in both places. */
+    if (path === "/app/family-app.js" && req.method === "GET") {
+      res.writeHead(200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end("/* served by web/server.ts; the client will use fetch */\n");
+      return;
+    }
+
     /* ---- static files ---- */
     if (req.method === "GET") {
-      const rel = path === "/" ? "index.html" : path.slice(1);
+      /* The published site puts the app under /app/ and the setup checker
+         beside it at the root. Serving the same shape locally is what lets
+         every path in the HTML be relative, which is in turn what stops the
+         pages breaking the moment they are hosted under a subpath. */
+      if (path === "/" || path === "/app") {
+        res.writeHead(302, { location: "/app/" }).end();
+        return;
+      }
+      const rel = path.endsWith("/") ? `${path.slice(1)}index.html` : path.slice(1);
       // normalize + prefix check keeps ../ out of the served directory
       const file = normalize(join(PUBLIC_DIR, rel));
       if (!file.startsWith(PUBLIC_DIR)) {

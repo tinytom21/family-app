@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Check Google setup</title>
-  <link rel="stylesheet" href="/app.css">
-  <link rel="stylesheet" href="/check-google.css">
+  <link rel="stylesheet" href="app/app.css">
+  <link rel="stylesheet" href="check-google.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🔑</text></svg>">
 </head>
 <body class="check">
@@ -21,7 +21,7 @@
     </div>
     <div class="actions">
       <button type="button" id="signout" class="btn" hidden>Sign out</button>
-      <a class="btn" href="/">Back to the week</a>
+      <a class="btn" href="app/">Back to the week</a>
     </div>
   </div>
 </header>
@@ -91,7 +91,7 @@
 
 </main>
 
-<script src="/vendor/supabase.js"></script>
-<script type="module" src="/check-google.js"></script>
+<script src="vendor-supabase.js"></script>
+<script type="module" src="check-google.js"></script>
 </body>
 </html>
