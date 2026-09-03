@@ -15,6 +15,7 @@
  */
 
 import { build } from "esbuild";
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +24,25 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const docs = join(root, "..", "..", "docs");
 const out = join(docs, "app");
+
+/* ---- does the client actually parse? ----
+ *
+ * The rendering client is hand-written JavaScript that nothing compiles, so a
+ * stray character in it is not caught by the type stripper, the tests, or
+ * esbuild — none of them ever read the file. A syntax error there takes the
+ * whole page down while every other check stays green, which is exactly how
+ * one reached the published site once. Cheap to check, embarrassing to miss.
+ */
+for (const file of ["app/app.js", "app/setup.js", "app/account.js", "check-google.js", "check-logic.js"]) {
+  const source = join(root, "web/public", file);
+  try {
+    execFileSync(process.execPath, ["--check", source], { stdio: "pipe" });
+  } catch (error) {
+    throw new Error(
+      `Refusing to build: ${file} does not parse.\n${error.stderr?.toString() ?? error.message}`,
+    );
+  }
+}
 
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });

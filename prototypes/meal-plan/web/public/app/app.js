@@ -292,8 +292,7 @@ function renderList(state) {
     copy.addEventListener("click", async () => {
       const text = state.list.lines
         .map((l) => `- ${l.name} — ${formatBase(l.requiredBase, l.base)}`)
-        .join("
-");
+        .join("\n");
       try {
         await navigator.clipboard.writeText(text);
         copy.textContent = "Copied";
