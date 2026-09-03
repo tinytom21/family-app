@@ -212,9 +212,24 @@ for (const asset of stamped) {
 }
 await writeFile(indexPath, indexHtml, "utf8");
 
-/* ---- the check that matters ---- */
-const bundle = await readFile(join(out, "family-app.js"), "utf8");
-assertNoSecretsShaped(bundle);
+/* ---- the check that matters ----
+ *
+ * Every file that actually gets published, not just the bundle. The earlier
+ * version scanned family-app.js alone, which left the hand-written client and
+ * the setup checker — the files a person is most likely to paste a key into
+ * while debugging — completely unchecked.
+ */
+for (const file of [
+  join(out, "family-app.js"),
+  join(out, "app.js"),
+  join(out, "setup.js"),
+  join(out, "account.js"),
+  join(out, "supabase-config.js"),
+  join(docs, "check-google.js"),
+  join(docs, "check-logic.js"),
+]) {
+  assertNoSecretsShaped(await readFile(file, "utf8"), file);
+}
 
 const bytes = result.metafile.outputs[
   Object.keys(result.metafile.outputs).find((k) => k.endsWith("family-app.js"))
@@ -229,10 +244,13 @@ console.log("  no API keys, no model SDK, no server.\n");
  * a live credential to a public web page, and it would look fine until the
  * bill arrived. Cheap to check, catastrophic to miss.
  */
-function assertNoSecretsShaped(source) {
+function assertNoSecretsShaped(source, where = "the bundle") {
   const patterns = [
     /sk-ant-[A-Za-z0-9_-]{8,}/,
+    // Google issues these in two shapes and a guard that knows one waves the
+    // other straight through — the same gap the Supabase check had.
     /AIza[A-Za-z0-9_-]{20,}/,
+    /\bAQ\.[A-Za-z0-9_-]{30,}/,
     /ANTHROPIC_API_KEY\s*[:=]\s*["'][^"']+["']/,
     /GEMINI_API_KEY\s*[:=]\s*["'][^"']+["']/,
   ];
@@ -240,7 +258,7 @@ function assertNoSecretsShaped(source) {
     const hit = source.match(pattern);
     if (hit) {
       throw new Error(
-        `Refusing to write the bundle: it contains something key-shaped (${hit[0].slice(0, 12)}…).`,
+        `Refusing to build: ${where} contains something key-shaped (${hit[0].slice(0, 12)}…).`,
       );
     }
   }
