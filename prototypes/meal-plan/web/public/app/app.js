@@ -262,6 +262,22 @@ function renderList(state) {
         );
       }
       row.append(detail);
+
+      // No supermarket will let us fill a basket, so the next best thing is to
+      // put the shopper one click from the right aisle and let them pick.
+      if (line.links?.length) {
+        const shop = el("span", "line-shop");
+        for (const link of line.links) {
+          const anchor = document.createElement("a");
+          anchor.href = link.url;
+          anchor.target = "_blank";
+          anchor.rel = "noopener noreferrer";
+          anchor.textContent = link.name;
+          anchor.title = `Search ${link.name} for ${line.name}`;
+          shop.append(anchor);
+        }
+        row.append(shop);
+      }
       group.append(row);
     }
     container.append(group);
@@ -269,6 +285,26 @@ function renderList(state) {
 
   const notes = $("list-footnotes");
   notes.replaceChildren();
+
+  if (state.list.lines.length) {
+    const copy = el("button", "mini", "Copy the list");
+    copy.type = "button";
+    copy.addEventListener("click", async () => {
+      const text = state.list.lines
+        .map((l) => `- ${l.name} — ${formatBase(l.requiredBase, l.base)}`)
+        .join("
+");
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = "Copied";
+        setTimeout(() => (copy.textContent = "Copy the list"), 1500);
+      } catch {
+        // Clipboard access can be refused; say so rather than looking broken.
+        setStatus("This browser would not let me use the clipboard.", true);
+      }
+    });
+    notes.append(copy);
+  }
   if (state.list.coveredByPantry.length) {
     notes.append(
       el("p", null, `Already have: ${state.list.coveredByPantry.join(", ")}`),

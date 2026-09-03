@@ -23,7 +23,45 @@ API key given away. Clone and set a key to see that half.
 | `prototypes/meal-plan/src/app-state.ts` | The whole app, with no idea where it is running. |
 | `supabase/schema.sql` | Households, membership, invites and state — and the RLS that is the security model. |
 
+## Run it for real
+
+The hosted demo has no model behind it, so **Replan with AI** is disabled there.
+To use this for an actual week's shop, run it locally with a key:
+
+```bash
+cd "prototypes/meal-plan"
+npm install
+```
+
+```bash
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+npm run web
+```
+
+Then open <http://localhost:4321>. `GEMINI_API_KEY` works instead if you'd
+rather; if both are set, Claude wins, and `MEAL_PLAN_PROVIDER=gemini` forces the
+other.
+
+The order that gets you a usable week:
+
+1. **Set the family up** in the intro screen — real names, real allergies.
+2. **Connect calendar** for each adult who has one. Run `/check-google.html`
+   once first if you have not already.
+3. **Check the week's table** and fix whatever the calendars got wrong: who is
+   in, who is cooking, how long they have. Press *Looks right*.
+4. **Replan with AI.** It plans around the grid, so do this after step 3, not
+   before.
+5. **Confirm what is already in the cupboard** in the larder column. Anything
+   you confirm drops off the shopping list.
+6. **Shop.** Each line links straight into a Tesco or Sainsbury's search, and
+   *Copy the list* gives you the lot as text.
+
+The week is taken from the real calendar — a household set up today is planned
+for tomorrow onward. The example family stays pinned to its fixture week in
+August, because its calendars and jobs are written against it.
+
 ## Run it
+
 
 ```bash
 cd "prototypes/meal-plan"
@@ -120,7 +158,7 @@ If both are present, Claude wins; force the other with
 ## The rest of the commands
 
 ```bash
-npm test           # 181 tests, no API key needed
+npm test           # 197 tests, no API key needed
 npm run demo       # the same week, in the terminal
 npm run guardrails # a deliberately broken plan, and what catches it
 npm run live       # one plan via the model, with token counts and cost

@@ -705,3 +705,17 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* one click from the right aisle, since no supermarket offers a basket API */
+.line-shop {
+  grid-column: 1 / -1;
+  display: flex; gap: .5rem; flex-wrap: wrap;
+  margin-top: .1rem;
+}
+.line-shop a {
+  font-family: var(--mono); font-size: .6rem;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-faint); text-decoration: none;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.line-shop a:hover { color: var(--accent); border-bottom-color: var(--accent); }

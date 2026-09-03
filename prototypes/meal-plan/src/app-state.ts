@@ -50,6 +50,9 @@ import {
 import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
+import { nextWeekStart, redatePlan, todayIn } from "./domain/week.ts";
+import { linksFor } from "./domain/retailers.ts";
+import { getIngredient } from "./domain/catalogue.ts";
 import {
   INVITE_PROBLEMS,
   generateInviteCode,
@@ -164,14 +167,18 @@ function freshSnapshot(): Snapshot {
 /* ------------------------------------------------------------------ */
 
 export function createApp(
-  options: { ai?: AiHooks; seed?: Partial<Snapshot> } = {},
+  options: { ai?: AiHooks; seed?: Partial<Snapshot>; today?: string } = {},
 ) {
   const ai = options.ai ?? { available: false };
+  // The clock, unless a caller pins it. Tests and the example household pin it;
+  // a real household follows the calendar, because a plan whose days are all in
+  // the past fails in ways that look like unrelated bugs.
+  const realToday = options.today ?? todayIn();
 
   const state = {
     ...freshSnapshot(),
     ...options.seed,
-    today: TODAY,
+    today: realToday,
     source: "fixture" as "fixture" | "model",
     lastRun: null as null | {
       provider: string;
@@ -213,6 +220,9 @@ export function createApp(
   const currentConstraints = (): PlanConstraints => ({
     ...CONSTRAINTS,
     people: state.people,
+    // The plan's own week, not the fixture's — otherwise a household set up in
+    // September is asked to plan a week in August.
+    weekStarting: state.plan.weekStarting,
     week: currentWeek(),
   });
 
@@ -302,7 +312,7 @@ export function createApp(
         people: state.people.map((p) => ({ ...p, portion: portionFor(p) })),
         portions: householdPortions(state.people),
         notes: CONSTRAINTS.notes,
-        weekStarting: CONSTRAINTS.weekStarting,
+        weekStarting: state.plan.weekStarting,
         maxWeeknightMinutes: CONSTRAINTS.maxWeeknightMinutes,
         maxWeekendMinutes: CONSTRAINTS.maxWeekendMinutes,
         ageBrackets: AGE_BRACKETS.map((id) => ({
@@ -338,7 +348,19 @@ export function createApp(
           };
         }),
       },
-      list,
+      list: {
+        ...list,
+        // A search link per line. There is no supermarket API that can fill a
+        // basket, so the shopper resolves the product ambiguity themselves —
+        // which is the part an API was never going to get right anyway.
+        lines: list.lines.map((line) => {
+          const ingredient = getIngredient(line.ingredientId);
+          return {
+            ...line,
+            links: ingredient ? linksFor(ingredient) : [],
+          };
+        }),
+      },
       larder: projection,
       validation,
       tasks: buildTasks(),
@@ -380,8 +402,14 @@ export function createApp(
           ...(state.household.remoteId ? { remoteId: state.household.remoteId } : {}),
         };
 
+        // The starter week is moved onto the days actually coming up. Left on
+        // the fixture's dates it would all be in the past, and the calendar
+        // read, the jobs scheduler and every due date would quietly misbehave.
+        state.today = realToday;
+        state.plan = redatePlan(GOOD_PLAN, nextWeekStart(realToday));
+
         // A real family starts with an empty cupboard and no jobs — those are
-        // theirs to fill. The example week stays as something to look at and
+        // theirs to fill. The starter week stays as something to look at and
         // replan, because an app that opens on seven blank days looks broken.
         state.larder = { items: [], freezer: [] };
         state.tasks = [];
@@ -399,6 +427,10 @@ export function createApp(
          above, so nobody's real household is ever quietly seeded with fiction. */
       case "/api/household/example": {
         Object.assign(state, freshSnapshot());
+        // Pinned to the fixture week on purpose: the example calendars, larder
+        // dates and jobs are all written against it, and re-dating half of them
+        // would make the example demonstrate nothing.
+        state.today = TODAY;
         state.household = { name: "The Hardys", setUp: true };
         state.source = "fixture";
         state.lastRun = null;
