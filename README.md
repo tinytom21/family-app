@@ -55,6 +55,25 @@ sets the variable to the literal string `sk-ant-...`, and the assignment
 succeeds even when the command after it fails — the app now refuses that rather
 than sending it to Anthropic, but it is still a wasted minute.
 
+### Which model, and what it costs
+
+Roughly 2,300 tokens in and 7,000 out for one week's plan, so at one plan a
+week:
+
+| Model | Per plan | Per year |
+|---|---|---|
+| `claude-opus-5` (default) | ~$0.19 | ~$10 |
+| `claude-sonnet-5` | ~$0.11 | ~$6 |
+| `claude-haiku-4-5` | ~$0.04 | ~$2 |
+
+Set one with `$env:CLAUDE_MODEL = "claude-sonnet-5"`. A repair round costs
+another call, so budget for two or three plans' worth on a bad week.
+
+Gemini's free tier allows **twenty requests a day**, which is under three
+clicks of Replan once repair rounds are counted. It is enough to see the thing
+work and not enough to use, which is worth knowing before concluding the app is
+broken.
+
 The order that gets you a usable week:
 
 1. **Set the family up** in the intro screen — real names, real allergies.

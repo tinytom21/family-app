@@ -21,6 +21,29 @@ export interface Classified {
   readonly retryable: boolean;
   /** What a person should do about it, if anything. */
   readonly advice: string;
+  /** Seconds the provider itself asked us to wait, when it said. */
+  readonly retryAfterSeconds?: number;
+}
+
+/**
+ * How long the provider asked us to wait.
+ *
+ * Google states this in the error text — "Please retry in 42.792564234s" — and
+ * it is far better information than any backoff we could invent, because it
+ * distinguishes a queue that clears in seconds from a quota that resets
+ * tomorrow. Ignoring it is how a client hammers a limit it has already hit.
+ */
+export function retryAfterSeconds(message: string): number | undefined {
+  const patterns = [
+    /retry in ([0-9.]+)s/i,
+    /retryDelay"?:\s*"?([0-9.]+)s/i,
+    /try again in ([0-9.]+) ?s/i,
+  ];
+  for (const pattern of patterns) {
+    const hit = message.match(pattern);
+    if (hit) return Number(hit[1]);
+  }
+  return undefined;
 }
 
 export function classifyFailure(error: unknown): Classified {
@@ -37,12 +60,20 @@ export function classifyFailure(error: unknown): Classified {
   }
 
   if (status === 429 || /quota|rate limit|resource_exhausted/.test(text)) {
+    const after = retryAfterSeconds(message);
+    // A per-day quota does not clear while anybody is waiting, and every retry
+    // against it spends another request from a budget that is already empty.
+    // The free tier allows twenty a day, so retrying is actively harmful.
+    const daily = /per day|requests_per_day|free_tier/.test(text);
     return {
       kind: "quota",
-      // A rate limit does clear, but not on the timescale of a page waiting.
-      retryable: true,
-      advice:
-        "You are over the rate limit for this key. The free tier is tight — wait a minute, or use a different model.",
+      retryable: !daily && after !== undefined && after <= 30,
+      ...(after !== undefined ? { retryAfterSeconds: after } : {}),
+      advice: daily
+        ? "That is the daily cap for this key, not a momentary spike — it resets tomorrow. " +
+          "Add billing, or switch provider with MEAL_PLAN_PROVIDER=claude."
+        : `Over the rate limit${after ? `; the provider asked for ${Math.ceil(after)}s` : ""}. ` +
+          "The free tier is tight — wait, or use a different model.",
     };
   }
 
@@ -94,7 +125,10 @@ export async function withRetry<T>(
   run: () => Promise<T>,
   options: RetryOptions = {},
 ): Promise<T> {
-  const attempts = options.attempts ?? 4;
+  // Two, not four. Every attempt spends a request, and a free tier can be as
+  // small as twenty a day — a generous retry count turns one click of Replan
+  // into most of a day's budget without producing anything.
+  const attempts = options.attempts ?? 2;
   const base = options.baseDelayMs ?? 1_000;
   const max = options.maxDelayMs ?? 20_000;
   const sleep = options.sleep ?? wait;
@@ -109,8 +143,12 @@ export async function withRetry<T>(
       const verdict = classifyFailure(error);
       if (!verdict.retryable || attempt === attempts) break;
 
+      // The provider's own figure beats our guess when it gives one.
       const exponential = Math.min(max, base * 2 ** (attempt - 1));
-      const waitMs = Math.round(exponential * (0.5 + random() * 0.5));
+      const jittered = Math.round(exponential * (0.5 + random() * 0.5));
+      const waitMs = verdict.retryAfterSeconds
+        ? Math.round(verdict.retryAfterSeconds * 1000)
+        : jittered;
       options.onRetry?.({
         attempt,
         waitMs,

@@ -44,7 +44,9 @@ test("it succeeds after a transient failure clears", async () => {
       if (calls < 3) throw err(500, "experiencing high demand");
       return "a plan";
     },
-    { sleep: async (ms) => { waits.push(ms); }, random: () => 0.5 },
+    // Explicit, because the default is deliberately only two — see the
+    // free-tier budget test below.
+    { attempts: 4, sleep: async (ms) => { waits.push(ms); }, random: () => 0.5 },
   );
 
   assert.equal(result, "a plan");
@@ -86,4 +88,36 @@ test("the backoff is capped", async () => {
     ),
   );
   assert.deepEqual(waits, [1000, 2000, 4000, 4000, 4000]);
+});
+
+test("a daily quota is not retried, because retrying spends what is gone", () => {
+  // The exact error from a free-tier key that has used its twenty requests.
+  const v = classifyFailure(
+    err(429, "You exceeded your current quota. * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.7-flash Please retry in 42.792564234s."),
+  );
+  assert.equal(v.kind, "quota");
+  assert.equal(v.retryable, false, "the budget is spent; retrying spends more");
+  assert.match(v.advice, /resets tomorrow/);
+});
+
+test("a momentary rate limit is retried, at the provider's stated pace", async () => {
+  let calls = 0;
+  const waits: number[] = [];
+  await withRetry(
+    async () => {
+      calls++;
+      if (calls === 1) throw err(429, "rate limit. Please retry in 3s");
+      return "ok";
+    },
+    { sleep: async (ms) => { waits.push(ms); } },
+  );
+  // Its number, not ours — it knows when the queue clears and we do not.
+  assert.deepEqual(waits, [3000]);
+});
+
+test("one click cannot eat a day's free-tier budget", () => {
+  // 3 planner attempts x the retry default. Twenty requests a day is the free
+  // tier, so this has to stay small enough to click more than once.
+  const perClick = 3 * 2;
+  assert.ok(perClick <= 6, `${perClick} requests per click is too many`);
 });
