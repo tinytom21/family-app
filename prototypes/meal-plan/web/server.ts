@@ -21,12 +21,6 @@ const PORT = Number(process.env.PORT ?? 4321);
 const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
 
 /**
- * The model, wired in rather than imported by the app.
- *
- * Loaded lazily so that starting the server without a key costs nothing, and
- * so the SDKs stay out of any bundle that does not need them.
- */
-/**
  * Is there a usable model?
  *
  * Asked by trying to choose one, rather than by checking a variable is set —
@@ -84,6 +78,23 @@ const ai: AiHooks = {
   },
 };
 
+/** Long enough for a slow plan with two repair rounds, short enough to notice. */
+const MODEL_TIMEOUT_MS = Number(process.env.MODEL_TIMEOUT_MS ?? 180_000);
+
+function rejectAfter(ms: number, provider: { id: string }): Promise<never> {
+  return new Promise((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            `no answer in ${Math.round(ms / 1000)}s — it may be retrying a failing request. Run "npm run doctor" to find out why.`,
+          ),
+        ),
+      ms,
+    ).unref(),
+  );
+}
+
 /**
  * Say who rejected us.
  *
@@ -97,7 +108,10 @@ async function withProviderNamed<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   try {
-    return await run();
+    // The SDKs retry 5xx on their own, so one click can sit through several
+    // slow failures with nothing on screen but "Asking the model…". A ceiling
+    // turns an indefinite wait into an answer somebody can act on.
+    return await Promise.race([run(), rejectAfter(MODEL_TIMEOUT_MS, provider)]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const variable =

@@ -89,7 +89,10 @@ export class ClaudeProvider implements PlanProvider {
   readonly model: string;
   #client: any;
 
-  constructor(model = "claude-opus-5", client?: unknown) {
+  constructor(
+    model = process.env.CLAUDE_MODEL ?? "claude-opus-5",
+    client?: unknown,
+  ) {
     this.model = model;
     this.#client = client;
   }
@@ -191,7 +194,10 @@ export class GeminiProvider implements PlanProvider {
   /** Server-side conversation, so repair turns need not resend the plan. */
   #previousInteractionId: string | undefined;
 
-  constructor(model = "gemini-3.7-flash", client?: unknown) {
+  constructor(
+    model = process.env.GEMINI_MODEL ?? "gemini-3.7-flash",
+    client?: unknown,
+  ) {
     this.model = model;
     this.#client = client;
   }

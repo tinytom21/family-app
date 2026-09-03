@@ -143,6 +143,7 @@ npm run demo       # the same week, in the terminal
 npm run guardrails # a deliberately broken plan, and what catches it
 npm run live       # one plan via the model, with token counts and cost
 npm run build:static  # the hosted demo, into docs/app
+npm run doctor     # why will the model not answer? walks the path one rung at a time
 ```
 
 Requires Node 22.6+ — it runs the TypeScript directly, so there is no build
