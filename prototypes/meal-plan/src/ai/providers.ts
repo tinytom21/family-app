@@ -13,6 +13,7 @@
  */
 
 import { toAnthropicDialect, toGeminiDialect } from "./dialect.ts";
+import { withRetry } from "./retry.ts";
 
 type Json = Record<string, unknown>;
 
@@ -124,6 +125,16 @@ export class ClaudeProvider implements PlanProvider {
 
     // Claude has no server-side conversation state, so repair turns resend the
     // history. The cached system prefix is what keeps that affordable.
+    const message = await withRetry(() => this.#once(client, request), {
+      onRetry: ({ attempt, waitMs }) =>
+        console.log(
+          `  ${this.model} is busy; retrying in ${(waitMs / 1000).toFixed(1)}s (attempt ${attempt + 1})`,
+        ),
+    });
+    return this.#toResult(message);
+  }
+
+  async #once(client: any, request: GenerateRequest): Promise<any> {
     const stream = client.beta.messages.stream({
       model: this.model,
       max_tokens: 32000,
@@ -147,8 +158,10 @@ export class ClaudeProvider implements PlanProvider {
       messages: request.turns.map((t) => ({ role: t.role, content: t.text })),
     });
 
-    const message = await stream.finalMessage();
+    return await stream.finalMessage();
+  }
 
+  #toResult(message: any): GenerateResult {
     if (message.stop_reason === "refusal") {
       throw new Error(
         `Claude declined the request (${message.stop_details?.category ?? "unknown"}).`,
@@ -223,24 +236,18 @@ export class GeminiProvider implements PlanProvider {
     const client = await this.#ensureClient();
     const latest = request.turns[request.turns.length - 1];
 
-    const interaction = await client.interactions.create({
-      model: this.model,
-      input: latest.text,
-      system_instruction: request.system,
-      store: true,
-      ...(this.#previousInteractionId
-        ? { previous_interaction_id: this.#previousInteractionId }
-        : {}),
-      generation_config: {
-        thinking_level: "high",
-        max_output_tokens: 32000,
+    // A busy model is a queue, not a verdict — see retry.ts. Free-tier traffic
+    // is exactly where this shows up, so giving up on the first 500 would make
+    // the app look broken when it is only waiting its turn.
+    const interaction = await withRetry(
+      () => this.#once(client, request, latest),
+      {
+        onRetry: ({ attempt, waitMs }) =>
+          console.log(
+            `  ${this.model} is busy; retrying in ${(waitMs / 1000).toFixed(1)}s (attempt ${attempt + 1})`,
+          ),
       },
-      response_format: {
-        type: "text",
-        mime_type: "application/json",
-        schema: toGeminiDialect(request.schema),
-      },
-    });
+    );
 
     this.#previousInteractionId = interaction.id;
 
@@ -264,6 +271,27 @@ export class GeminiProvider implements PlanProvider {
         thoughtTokens: u.total_thought_tokens ?? 0,
       },
     };
+  }
+
+  async #once(client: any, request: GenerateRequest, latest: Turn): Promise<any> {
+    return await client.interactions.create({
+      model: this.model,
+      input: latest.text,
+      system_instruction: request.system,
+      store: true,
+      ...(this.#previousInteractionId
+        ? { previous_interaction_id: this.#previousInteractionId }
+        : {}),
+      generation_config: {
+        thinking_level: "high",
+        max_output_tokens: 32000,
+      },
+      response_format: {
+        type: "text",
+        mime_type: "application/json",
+        schema: toGeminiDialect(request.schema),
+      },
+    });
   }
 }
 

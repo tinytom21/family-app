@@ -114,12 +114,14 @@ async function withProviderNamed<T>(
     return await Promise.race([run(), rejectAfter(MODEL_TIMEOUT_MS, provider)]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const variable =
-      provider.id === "claude" ? "ANTHROPIC_API_KEY" : "GEMINI_API_KEY";
-    const hint = /401|authentication|api key|unauthor/i.test(message)
-      ? ` Check ${variable}, or set MEAL_PLAN_PROVIDER to use the other one.`
-      : "";
-    throw new Error(`${provider.id} (${provider.model}) refused: ${message}${hint}`);
+    const { classifyFailure } = await import("../src/ai/retry.ts");
+    const verdict = classifyFailure(error);
+    // Whose problem it is matters more than what the status code was: an hour
+    // spent checking a key that was never wrong is the failure mode here.
+    throw new Error(
+      `${provider.id} (${provider.model}) — ${message}` +
+        (verdict.advice ? ` ${verdict.advice}` : ""),
+    );
   }
 }
 
