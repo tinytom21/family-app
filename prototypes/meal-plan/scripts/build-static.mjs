@@ -16,6 +16,7 @@
 
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -168,6 +169,48 @@ function decodeJwtPayload(token) {
     return null; // newer publishable keys are not JWTs; nothing to inspect
   }
 }
+
+/* ---- stamp the asset URLs so a deploy replaces a page wholesale ----
+ *
+ * GitHub Pages serves these with a long max-age and no content hash, so a
+ * browser that fetched the previous build keeps using it — including a build
+ * that was broken. Worse, it mixes: a fresh index.html next to a cached app.js
+ * produces failures that look nothing like caching and cannot be reproduced by
+ * whoever did not visit at the wrong moment.
+ *
+ * A content hash in the query makes each deploy a different URL, so the browser
+ * cannot serve half of one build and half of another. This is the one place the
+ * build edits the HTML, and it throws if a reference it expects is missing —
+ * silently missing one is exactly how the checker page shipped broken before.
+ */
+const stamped = ["app.js", "app.css", "family-app.js", "supabase-config.js"];
+const indexPath = join(out, "index.html");
+let indexHtml = await readFile(indexPath, "utf8");
+
+for (const asset of stamped) {
+  const contents = await readFile(join(out, asset));
+  const version = createHash("sha256").update(contents).digest("hex").slice(0, 8);
+  const before = indexHtml;
+  indexHtml = indexHtml
+    .replace(`src="${asset}"`, `src="${asset}?v=${version}"`)
+    .replace(`href="${asset}"`, `href="${asset}?v=${version}"`);
+  if (indexHtml === before) {
+    throw new Error(`Refusing to build: index.html does not reference ${asset}.`);
+  }
+}
+{
+  const contents = await readFile(join(docs, "vendor-supabase.js"));
+  const version = createHash("sha256").update(contents).digest("hex").slice(0, 8);
+  const before = indexHtml;
+  indexHtml = indexHtml.replace(
+    'src="../vendor-supabase.js"',
+    `src="../vendor-supabase.js?v=${version}"`,
+  );
+  if (indexHtml === before) {
+    throw new Error("Refusing to build: index.html does not reference vendor-supabase.js.");
+  }
+}
+await writeFile(indexPath, indexHtml, "utf8");
 
 /* ---- the check that matters ---- */
 const bundle = await readFile(join(out, "family-app.js"), "utf8");
