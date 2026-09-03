@@ -60,18 +60,10 @@ The week is taken from the real calendar — a household set up today is planned
 for tomorrow onward. The example family stays pinned to its fixture week in
 August, because its calendars and jobs are written against it.
 
-## Run it
+## What's in it
 
-
-```bash
-cd "prototypes/meal-plan"
-npm install
-npm run web
-```
-
-Then open <http://localhost:4321>. You get the week, the jobs, the shopping list
-and the larder, all live — confirm what is in the cupboard and watch the
-shopping list change underneath you.
+You get the week, the jobs, the shopping list and the larder, all live — confirm
+what is in the cupboard and watch the shopping list change underneath you.
 
 On a first visit you get an **intro screen** rather than somebody else's data:
 how many of you, then names and ages, then allergies, likes and dislikes.
@@ -141,19 +133,7 @@ confidently wrong is worse than no total. So the list tells you what to put in
 the trolley, and the pack solver minimises what ends up in the bin rather than
 what it costs.
 
-Everything runs from a fixture week with no API key. To make the **Replan**
-button work, set one of these first:
-
-```bash
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-```
-
-```bash
-$env:GEMINI_API_KEY = "..."
-```
-
-If both are present, Claude wins; force the other with
-`MEAL_PLAN_PROVIDER=gemini`.
+Everything except the two AI buttons runs without an API key.
 
 ## The rest of the commands
 
