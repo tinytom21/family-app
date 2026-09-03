@@ -33,14 +33,27 @@ cd "prototypes/meal-plan"
 npm install
 ```
 
+Set a key, then start it — in the *same* window, because a key is set per
+terminal:
+
 ```bash
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-npm run web
+$env:GEMINI_API_KEY = "your-key"
+node web/server.ts
 ```
 
-Then open <http://localhost:4321>. `GEMINI_API_KEY` works instead if you'd
-rather; if both are set, Claude wins, and `MEAL_PLAN_PROVIDER=gemini` forces the
-other.
+Command Prompt uses `set GEMINI_API_KEY=your-key` instead. `ANTHROPIC_API_KEY`
+works just as well; if both are set Claude wins, and `MEAL_PLAN_PROVIDER=gemini`
+forces the other.
+
+These say `node` rather than `npm run` on purpose. Windows blocks `npm.ps1`
+under the default execution policy, so `npm` fails in PowerShell with a security
+error that has nothing to do with this project. `node` sidesteps it entirely;
+`npm.cmd run web` also works if you prefer npm.
+
+Paste a real key, not the placeholder. `$env:ANTHROPIC_API_KEY = "sk-ant-..."`
+sets the variable to the literal string `sk-ant-...`, and the assignment
+succeeds even when the command after it fails — the app now refuses that rather
+than sending it to Anthropic, but it is still a wasted minute.
 
 The order that gets you a usable week:
 
@@ -138,12 +151,12 @@ Everything except the two AI buttons runs without an API key.
 ## The rest of the commands
 
 ```bash
-npm test           # 197 tests, no API key needed
-npm run demo       # the same week, in the terminal
-npm run guardrails # a deliberately broken plan, and what catches it
-npm run live       # one plan via the model, with token counts and cost
-npm run build:static  # the hosted demo, into docs/app
-npm run doctor     # why will the model not answer? walks the path one rung at a time
+node --test "test/*.test.ts"   # 207 tests, no API key needed
+node scripts/doctor.mjs       # why will the model not answer?
+node src/run.ts demo          # the same week, in the terminal
+node src/run.ts guardrails    # a deliberately broken plan, and what catches it
+node src/run.ts live          # one plan via the model, with token counts and cost
+node scripts/build-static.mjs # the hosted demo, into docs/app
 ```
 
 Requires Node 22.6+ — it runs the TypeScript directly, so there is no build

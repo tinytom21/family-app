@@ -31,19 +31,46 @@ info(`MEAL_PLAN_PROVIDER ${process.env.MEAL_PLAN_PROVIDER ?? "(not set)"}`);
 console.log();
 
 /* ---- 2. which provider would the app choose ---- */
-let provider;
+let provider = null;
 try {
   const { selectProvider } = await import("../src/ai/providers.ts");
   provider = selectProvider();
   ok(`Provider chosen: ${provider.id} (${provider.model})`);
 } catch (error) {
   bad(`No provider: ${error.message}`);
-  process.exit(1);
+  howToSetAKey();
+  // Deliberately not process.exit(): calling it while the dynamic import above
+  // is still unwinding trips a libuv assertion on Windows and replaces a clear
+  // message with an incomprehensible crash. Setting the code and falling off
+  // the end exits just as non-zero, and cleanly.
+  process.exitCode = 1;
 }
-console.log();
 
-if (provider.id === "gemini") await checkGemini();
-else await checkClaude();
+if (provider) {
+  console.log();
+  if (provider.id === "gemini") await checkGemini();
+  else await checkClaude();
+}
+
+/**
+ * The variable has to be set in the same window you then run the app in, and
+ * the syntax differs by shell — which is a large share of "it says not set but
+ * I definitely set it".
+ */
+function howToSetAKey() {
+  console.log();
+  info("An API key is set per terminal window, and the syntax differs:");
+  console.log();
+  info("PowerShell");
+  info('  $env:GEMINI_API_KEY = "your-key"');
+  info("Command Prompt");
+  info('  set GEMINI_API_KEY=your-key');
+  console.log();
+  info("Then, in that same window:");
+  info("  node scripts/doctor.mjs");
+  info("  node web/server.ts");
+  console.log();
+}
 
 /* ------------------------------------------------------------------ */
 
