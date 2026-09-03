@@ -264,22 +264,75 @@ export class GeminiProvider implements PlanProvider {
 /* ------------------------------------------------------------------ */
 
 /**
+ * A key that is obviously not a key.
+ *
+ * Copying `$env:ANTHROPIC_API_KEY = "sk-ant-..."` straight out of a README sets
+ * the variable to the literal placeholder, and the assignment succeeds even if
+ * the command after it does not. The result is a provider that looks configured,
+ * fails with a bare 401 from someone else's server, and gives no hint that it
+ * picked the provider you were not trying to use.
+ */
+function looksLikePlaceholder(key: string): boolean {
+  const value = key.trim();
+  return (
+    value.length < 20 ||
+    value.includes("...") ||
+    value.includes("…") ||
+    /^(your|my|paste|insert|todo|xxx)/i.test(value)
+  );
+}
+
+function usable(key: string | undefined): boolean {
+  return Boolean(key?.trim()) && !looksLikePlaceholder(key!);
+}
+
+/**
  * Pick a provider. `MEAL_PLAN_PROVIDER` wins if set; otherwise whichever key is
  * present, preferring Claude because that is what the prototype runs on.
  */
 export function selectProvider(env = process.env): PlanProvider {
   const requested = env.MEAL_PLAN_PROVIDER?.toLowerCase();
-  if (requested === "claude") return new ClaudeProvider();
-  if (requested === "gemini") return new GeminiProvider();
+  const named: Record<string, () => PlanProvider> = {
+    claude: () => new ClaudeProvider(),
+    gemini: () => new GeminiProvider(),
+  };
+
   if (requested) {
+    const make = named[requested];
+    if (!make) {
+      throw new Error(
+        `Unknown MEAL_PLAN_PROVIDER "${requested}". Use "claude" or "gemini".`,
+      );
+    }
+    const variable = requested === "claude" ? "ANTHROPIC_API_KEY" : "GEMINI_API_KEY";
+    if (!usable(env[variable])) {
+      throw new Error(
+        `MEAL_PLAN_PROVIDER is "${requested}" but ${variable} ${describe(env[variable])}.`,
+      );
+    }
+    return make();
+  }
+
+  // A placeholder must not shadow a real key. Anthropic is preferred, but only
+  // when its key is actually a key — otherwise Gemini gets its turn instead of
+  // the request failing against a provider you were not trying to use.
+  if (usable(env.ANTHROPIC_API_KEY)) return new ClaudeProvider();
+  if (usable(env.GEMINI_API_KEY)) return new GeminiProvider();
+
+  const placeholders = (["ANTHROPIC_API_KEY", "GEMINI_API_KEY"] as const).filter(
+    (name) => env[name]?.trim() && looksLikePlaceholder(env[name]!),
+  );
+  if (placeholders.length) {
     throw new Error(
-      `Unknown MEAL_PLAN_PROVIDER "${requested}". Use "claude" or "gemini".`,
+      `${placeholders.join(" and ")} ${placeholders.length > 1 ? "are" : "is"} set to a placeholder, not a real key. ` +
+        "Set the real value, or clear it with $env:NAME = $null and use the other provider.",
     );
   }
-  if (env.ANTHROPIC_API_KEY) return new ClaudeProvider();
-  if (env.GEMINI_API_KEY) return new GeminiProvider();
   throw new Error(
     "No model provider configured. Set ANTHROPIC_API_KEY or GEMINI_API_KEY " +
       "(or MEAL_PLAN_PROVIDER to force one).",
   );
 }
+
+const describe = (value: string | undefined): string =>
+  !value?.trim() ? "is not set" : "is set to a placeholder, not a real key";

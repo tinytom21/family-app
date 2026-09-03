@@ -28,16 +28,54 @@ test("both SDKs expose the surfaces the providers call", async () => {
   assert.equal(typeof google.interactions.create, "function");
 });
 
+/** Long enough and unremarkable enough to pass for real. */
+const CLAUDE_KEY = "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaa";
+const GEMINI_KEY = "AQ.Abaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
 test("provider selection follows the env var, then the available key", () => {
-  assert.equal(selectProvider({ MEAL_PLAN_PROVIDER: "claude" } as any).id, "claude");
-  assert.equal(selectProvider({ MEAL_PLAN_PROVIDER: "gemini" } as any).id, "gemini");
+  assert.equal(
+    selectProvider({ MEAL_PLAN_PROVIDER: "claude", ANTHROPIC_API_KEY: CLAUDE_KEY } as any).id,
+    "claude",
+  );
+  assert.equal(
+    selectProvider({ MEAL_PLAN_PROVIDER: "gemini", GEMINI_API_KEY: GEMINI_KEY } as any).id,
+    "gemini",
+  );
 
   // No explicit choice: whichever key is present, Claude first.
-  assert.equal(selectProvider({ ANTHROPIC_API_KEY: "x" } as any).id, "claude");
-  assert.equal(selectProvider({ GEMINI_API_KEY: "x" } as any).id, "gemini");
+  assert.equal(selectProvider({ ANTHROPIC_API_KEY: CLAUDE_KEY } as any).id, "claude");
+  assert.equal(selectProvider({ GEMINI_API_KEY: GEMINI_KEY } as any).id, "gemini");
   assert.equal(
-    selectProvider({ ANTHROPIC_API_KEY: "x", GEMINI_API_KEY: "y" } as any).id,
+    selectProvider({ ANTHROPIC_API_KEY: CLAUDE_KEY, GEMINI_API_KEY: GEMINI_KEY } as any).id,
     "claude",
+  );
+});
+
+test("a placeholder key never shadows a real one", () => {
+  // Copying `$env:ANTHROPIC_API_KEY = "sk-ant-..."` out of a README sets the
+  // variable to the placeholder, and the assignment succeeds even when the
+  // command after it does not. Preferring that over a working Gemini key sends
+  // the request to the wrong provider and returns somebody else's bare 401.
+  assert.equal(
+    selectProvider({ ANTHROPIC_API_KEY: "sk-ant-...", GEMINI_API_KEY: GEMINI_KEY } as any).id,
+    "gemini",
+  );
+});
+
+test("a placeholder on its own says so, rather than failing at the provider", () => {
+  assert.throws(
+    () => selectProvider({ ANTHROPIC_API_KEY: "sk-ant-..." } as any),
+    /ANTHROPIC_API_KEY is set to a placeholder/,
+  );
+  assert.throws(
+    () => selectProvider({ GEMINI_API_KEY: "your-key-here" } as any),
+    /placeholder/,
+  );
+  // Forcing a provider whose key is missing names both the provider and the
+  // variable, so there is nothing left to guess at.
+  assert.throws(
+    () => selectProvider({ MEAL_PLAN_PROVIDER: "gemini" } as any),
+    /MEAL_PLAN_PROVIDER is "gemini" but GEMINI_API_KEY is not set/,
   );
 });
 

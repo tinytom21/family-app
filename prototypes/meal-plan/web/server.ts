@@ -26,16 +26,38 @@ const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
  * Loaded lazily so that starting the server without a key costs nothing, and
  * so the SDKs stay out of any bundle that does not need them.
  */
+/**
+ * Is there a usable model?
+ *
+ * Asked by trying to choose one, rather than by checking a variable is set —
+ * a placeholder left over from a copied command line is "set" and lights the
+ * buttons up, then fails at the provider with somebody else's 401.
+ */
+const modelProblem = await (async () => {
+  try {
+    const { selectProvider } = await import("../src/ai/providers.ts");
+    selectProvider();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+})();
+
 const ai: AiHooks = {
-  available: Boolean(process.env.ANTHROPIC_API_KEY ?? process.env.GEMINI_API_KEY),
+  available: modelProblem === null,
 
   async generatePlan(constraints, options) {
     const { generatePlan, selectProvider } = await import("../src/ai/planner.ts");
-    const run = await generatePlan(constraints, {
-      provider: selectProvider(),
-      slots: options.slots,
-      larderLines: options.larderLines,
-    });
+    const provider = selectProvider();
+    // A bare 401 from an SDK says nothing about which provider it came from,
+    // which matters most when two keys are set and the wrong one won.
+    const run = await withProviderNamed(provider, () =>
+      generatePlan(constraints, {
+        provider,
+        slots: options.slots,
+        larderLines: options.larderLines,
+      }),
+    );
     return {
       plan: run.plan,
       provider: run.provider,
@@ -48,9 +70,10 @@ const ai: AiHooks = {
   async captureTasks(text, context) {
     const { captureTasks } = await import("../src/ai/capture.ts");
     const { selectProvider } = await import("../src/ai/providers.ts");
-    const run = await captureTasks(text, context, {
-      provider: selectProvider(),
-    });
+    const provider = selectProvider();
+    const run = await withProviderNamed(provider, () =>
+      captureTasks(text, context, { provider }),
+    );
     return {
       tasks: run.tasks,
       note: run.note,
@@ -60,6 +83,31 @@ const ai: AiHooks = {
     };
   },
 };
+
+/**
+ * Say who rejected us.
+ *
+ * The SDKs throw an HTTP error with the remote server's own wording and nothing
+ * else — `401 API key is invalid` gives no clue that the request went to
+ * Anthropic when you thought you had configured Gemini. With two keys in the
+ * environment that is the single most confusing failure available.
+ */
+async function withProviderNamed<T>(
+  provider: { id: string; model: string },
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const variable =
+      provider.id === "claude" ? "ANTHROPIC_API_KEY" : "GEMINI_API_KEY";
+    const hint = /401|authentication|api key|unauthor/i.test(message)
+      ? ` Check ${variable}, or set MEAL_PLAN_PROVIDER to use the other one.`
+      : "";
+    throw new Error(`${provider.id} (${provider.model}) refused: ${message}${hint}`);
+  }
+}
 
 const app = createApp({ ai });
 
@@ -173,7 +221,7 @@ server.listen(PORT, () => {
   console.log(
     ai.available
       ? "  A model key is present: the AI buttons are live.\n"
-      : "  No model key set, so the AI buttons are disabled.\n" +
-          "  Everything else works from the fixture week.\n",
+      : `  AI buttons disabled — ${modelProblem}\n` +
+          "  Everything else works without a model.\n",
   );
 });
