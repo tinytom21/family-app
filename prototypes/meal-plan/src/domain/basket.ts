@@ -279,7 +279,14 @@ export function planBasket(
 export interface BasketProvider {
   readonly id: string;
   search(term: string, limit?: number): Promise<RetailerProduct[]>;
-  add(sku: string, quantity: number): Promise<void>;
+  /**
+   * Set a line to this quantity, rather than adding to it.
+   *
+   * Idempotent on purpose: filling the basket twice should leave one week's
+   * shopping, not two, and "nothing seemed to happen so I clicked again" is a
+   * thing people do.
+   */
+  set(sku: string, quantity: number): Promise<void>;
   basket(): Promise<{ sku: string; title: string; quantity: number }[]>;
   /** Returns where to go and pay. Never pays. */
   checkoutUrl(): Promise<string>;

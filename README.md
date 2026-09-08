@@ -55,6 +55,37 @@ sets the variable to the literal string `sk-ant-...`, and the assignment
 succeeds even when the command after it fails — the app now refuses that rather
 than sending it to Anthropic, but it is still a wasted minute.
 
+### Filling a Tesco basket
+
+Off by default, local only, and never in the published demo — which has no
+server and so has no path to a supermarket session at all. Turn it on for a
+session:
+
+```bash
+$env:TESCO_BASKET = "1"
+node web/server.ts
+```
+
+The first run opens a real Chrome for you to sign in to Tesco yourself; no
+password passes through this app. After that it is plain HTTP, and the session
+persists at `~/.basketeer/session.json`. That file is **plain text and can act
+on your grocery account** — worth knowing before running this on a shared
+machine.
+
+The Basket panel shows what it can match and what it cannot. You confirm a
+product once per ingredient and pack size; the choice is remembered, so week two
+is a single click. Anything unmatched is listed rather than guessed at, because
+a wrong guess arrives in a delivery.
+
+**Nothing here spends money.** Filling sets quantities — pressing it twice
+leaves one week's shopping, not two — and checkout returns a URL for you to go
+and pay, having seen the real total and the real substitutions.
+
+It uses [basketeer](https://github.com/tobyandrews1985/basketeer), which is
+reverse-engineered and pre-release. Tesco publishes no API for this, so it will
+break when they change something; the provider is five methods so that break is
+an afternoon.
+
 ### Which model, and what it costs
 
 Roughly 2,300 tokens in and 7,000 out for one week's plan, so at one plan a

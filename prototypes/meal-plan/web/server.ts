@@ -15,7 +15,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createApp } from "../src/app-state.ts";
-import type { AiHooks } from "../src/app-state.ts";
+import type { AiHooks, BasketHooks } from "../src/app-state.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
 const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
@@ -125,7 +125,27 @@ async function withProviderNamed<T>(
   }
 }
 
-const app = createApp({ ai });
+/**
+ * The Tesco basket, if this machine has been set up for it.
+ *
+ * Off unless TESCO_BASKET=1, because it holds a session that can act on a real
+ * grocery account and nobody should acquire that by accident. The published
+ * build passes no basket at all — see web/static/main.ts, which imports none of
+ * this.
+ */
+const basket: BasketHooks = await (async () => {
+  if (process.env.TESCO_BASKET !== "1") return { available: false };
+  const { TescoBasket } = await import("../src/integrations/tesco.ts");
+  const provider = new TescoBasket({ profileDir: process.env.TESCO_PROFILE_DIR });
+  return {
+    available: true,
+    provider,
+    signedIn: () => provider.isSignedIn(),
+    signIn: () => provider.signIn(),
+  };
+})();
+
+const app = createApp({ ai, basket });
 
 /* ------------------------------------------------------------------ */
 
@@ -239,5 +259,10 @@ server.listen(PORT, () => {
       ? "  A model key is present: the AI buttons are live.\n"
       : `  AI buttons disabled — ${modelProblem}\n` +
           "  Everything else works without a model.\n",
+  );
+  console.log(
+    basket.available
+      ? "  Tesco basket filling is ON for this session.\n"
+      : "  Tesco basket filling is off. Set TESCO_BASKET=1 to enable it.\n",
   );
 });

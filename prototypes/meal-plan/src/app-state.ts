@@ -51,7 +51,9 @@ import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
 import { nextWeekStart, redatePlan, todayIn } from "./domain/week.ts";
-import { linksFor } from "./domain/retailers.ts";
+import { linksFor, searchTermFor } from "./domain/retailers.ts";
+import { CONFIDENT, planBasket, rankCandidates } from "./domain/basket.ts";
+import type { BasketProvider, ProductLink } from "./domain/basket.ts";
 import { getIngredient } from "./domain/catalogue.ts";
 import {
   INVITE_PROBLEMS,
@@ -112,6 +114,21 @@ export interface AiHooks {
   ): Promise<CaptureRunSummary>;
 }
 
+/**
+ * Filling a real supermarket basket.
+ *
+ * Injected rather than imported, exactly like the model, and for a stronger
+ * reason: the session behind it can act on somebody's grocery account. The
+ * browser build passes nothing, so the published bundle has no path to a
+ * basket at all — a property of the build rather than a flag.
+ */
+export interface BasketHooks {
+  readonly available: boolean;
+  readonly provider?: BasketProvider;
+  signedIn?(): Promise<boolean>;
+  signIn?(): Promise<void>;
+}
+
 export interface ApiResult {
   readonly status: number;
   readonly body: unknown;
@@ -134,6 +151,8 @@ export interface HouseholdInfo {
 /** The part of the state worth keeping between visits. */
 export interface Snapshot {
   household: HouseholdInfo;
+  /** Confirmed ingredient-to-product mappings, learned once and reused. */
+  productLinks: ProductLink[];
   plan: MealPlan;
   larder: Larder;
   people: Person[];
@@ -149,6 +168,7 @@ export interface Snapshot {
 function freshSnapshot(): Snapshot {
   return {
     household: { name: "", setUp: false },
+    productLinks: [],
     plan: GOOD_PLAN,
     larder: { ...DEMO_LARDER, items: [...DEMO_LARDER.items] },
     people: PEOPLE.map((p) => ({ ...p })),
@@ -167,9 +187,15 @@ function freshSnapshot(): Snapshot {
 /* ------------------------------------------------------------------ */
 
 export function createApp(
-  options: { ai?: AiHooks; seed?: Partial<Snapshot>; today?: string } = {},
+  options: {
+    ai?: AiHooks;
+    basket?: BasketHooks;
+    seed?: Partial<Snapshot>;
+    today?: string;
+  } = {},
 ) {
   const ai = options.ai ?? { available: false };
+  const basketHooks = options.basket ?? { available: false };
   // The clock, unless a caller pins it. Tests and the example household pin it;
   // a real household follows the calendar, because a plan whose days are all in
   // the past fails in ways that look like unrelated bugs.
@@ -436,6 +462,123 @@ export function createApp(
         state.lastRun = null;
         state.lastCapture = null;
         return ok();
+      }
+
+      /* ---- filling a supermarket basket ---- */
+
+      /* Everything here is local-only: the browser build passes no basket
+         provider, so these all answer "not switched on" there. */
+      case "/api/basket/plan": {
+        const week = currentWeek();
+        const projection = projectLarder(
+          state.larder, state.plan, state.today, householdPortions(state.people),
+        );
+        const list = buildShoppingList(state.plan, larderToPantry(projection), {
+          restockStaples: state.restockStaples,
+        });
+        const plan = planBasket(list.lines, state.productLinks);
+        return {
+          status: 200,
+          body: {
+            ...plan,
+            available: basketHooks.available,
+            signedIn: basketHooks.signedIn ? await basketHooks.signedIn() : false,
+          },
+        };
+      }
+
+      /* Search the retailer for one line and rank what comes back. The ranking
+         is the domain's job; this only fetches. */
+      case "/api/basket/candidates": {
+        if (!basketHooks.provider) return bad(400, NO_BASKET);
+        const ingredient = getIngredient(body.ingredientId);
+        if (!ingredient) return bad(404, `No ingredient "${body.ingredientId}"`);
+        try {
+          const found = await basketHooks.provider.search(
+            body.term?.trim() || searchTermFor(ingredient),
+            12,
+          );
+          return {
+            status: 200,
+            body: {
+              candidates: rankCandidates(ingredient, body.packSize, found),
+              confident: CONFIDENT,
+            },
+          };
+        } catch (error) {
+          return bad(400, message(error));
+        }
+      }
+
+      /* A person has decided. Remembered per ingredient and pack size, so the
+         same choice is never asked for twice. */
+      case "/api/basket/link": {
+        const { ingredientId, packSize, sku, title } = body;
+        if (!ingredientId || !sku || !Number.isFinite(packSize)) {
+          return bad(400, "ingredientId, packSize and sku required");
+        }
+        state.productLinks = [
+          ...state.productLinks.filter(
+            (l) => !(l.ingredientId === ingredientId && l.packSize === packSize),
+          ),
+          { ingredientId, packSize, sku, title: title ?? sku, confirmedOn: state.today },
+        ];
+        return ok();
+      }
+
+      case "/api/basket/unlink": {
+        state.productLinks = state.productLinks.filter(
+          (l) => !(l.ingredientId === body.ingredientId && l.packSize === body.packSize),
+        );
+        return ok();
+      }
+
+      /* Put the confirmed items in the basket. Quantities are *set*, so
+         pressing this twice leaves one week's shopping rather than two. */
+      case "/api/basket/fill": {
+        if (!basketHooks.provider) return bad(400, NO_BASKET);
+        const projection = projectLarder(
+          state.larder, state.plan, state.today, householdPortions(state.people),
+        );
+        const list = buildShoppingList(state.plan, larderToPantry(projection), {
+          restockStaples: state.restockStaples,
+        });
+        const plan = planBasket(list.lines, state.productLinks);
+        const done: string[] = [];
+        const failed: { title: string; why: string }[] = [];
+        for (const item of plan.items) {
+          try {
+            await basketHooks.provider.set(item.sku, item.quantity);
+            done.push(item.title);
+          } catch (error) {
+            // One unavailable product must not abandon the rest of the shop.
+            failed.push({ title: item.title, why: message(error) });
+          }
+        }
+        return {
+          status: 200,
+          body: { added: done, failed, skipped: plan.needsChoosing.length },
+        };
+      }
+
+      /* Hand back where to pay. Nothing here spends money, by design. */
+      case "/api/basket/checkout": {
+        if (!basketHooks.provider) return bad(400, NO_BASKET);
+        try {
+          return { status: 200, body: { url: await basketHooks.provider.checkoutUrl() } };
+        } catch (error) {
+          return bad(400, message(error));
+        }
+      }
+
+      case "/api/basket/signin": {
+        if (!basketHooks.signIn) return bad(400, NO_BASKET);
+        try {
+          await basketHooks.signIn();
+          return { status: 200, body: { signedIn: true } };
+        } catch (error) {
+          return bad(400, message(error));
+        }
       }
 
       /* ---- invites ---- */
@@ -864,6 +1007,7 @@ export function createApp(
   function snapshot(): Snapshot {
     return {
       household: state.household,
+      productLinks: state.productLinks,
       plan: state.plan,
       larder: state.larder,
       people: state.people,
@@ -887,6 +1031,10 @@ export function createApp(
 
   return { buildState, handle, snapshot, reset };
 }
+
+const NO_BASKET =
+  "Basket filling is not switched on. It runs from the local server only — " +
+  "the published demo has no supermarket session and never will.";
 
 const NO_MODEL =
   "No model provider configured. Set ANTHROPIC_API_KEY or GEMINI_API_KEY " +
