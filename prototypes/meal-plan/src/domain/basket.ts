@@ -97,13 +97,21 @@ export function parseSize(title: string): ParsedSize | null {
 
 export interface Scored {
   readonly product: RetailerProduct;
-  /** 0 to 1. At or above `CONFIDENT` it is worth offering as the default. */
+  /** 0 to 1, for ordering. Not a licence to pre-select — see `preselect`. */
   readonly score: number;
+  /**
+   * Safe to tick on the family's behalf: the whole catalogue name matched and
+   * the size did not disagree. Deliberately stricter than any score threshold.
+   */
+  readonly preselect: boolean;
   /** Why it scored that way, so a person can disagree with a reason. */
   readonly why: string;
 }
 
-/** Below this nothing is pre-selected; a person picks from the list instead. */
+/**
+ * A score this high is a plausible match, worth showing near the top. It says
+ * nothing about whether to tick it on anybody's behalf — that is `preselect`.
+ */
 export const CONFIDENT = 0.62;
 
 const STOPWORDS = new Set([
@@ -183,6 +191,13 @@ export function scoreMatch(
   return {
     product,
     score: Number((nameScore * 0.7 + sizeScore * 0.3).toFixed(3)),
+    // Ticking something on the family's behalf is a stricter test than a high
+    // score: every word of the catalogue name must be there, and the size must
+    // not disagree. The 20% mince scores 0.83 next to the 5% mince, and the
+    // same mince in the wrong size scores 0.75 — both comfortably over any
+    // sensible threshold, and both would arrive in a delivery as the wrong
+    // thing for somebody who clicked through without reading the label.
+    preselect: wanted.size > 0 && hits === wanted.size && sizeScore > 0.15,
     why: `${hits}/${wanted.size} words matched, ${sizeWhy}`,
   };
 }
@@ -206,6 +221,9 @@ export interface BasketItem {
   readonly title: string;
   readonly quantity: number;
   readonly ingredientId: string;
+  /** Which pack this is, so a choice can be changed without guessing which one. */
+  readonly packSize: number;
+  readonly packLabel: string;
 }
 
 export interface NeedsChoosing {
@@ -250,6 +268,8 @@ export function planBasket(
           title: link.title,
           quantity: count,
           ingredientId: line.ingredientId,
+          packSize: pack.size,
+          packLabel: pack.label,
         });
       } else {
         needsChoosing.push({

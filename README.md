@@ -58,8 +58,22 @@ than sending it to Anthropic, but it is still a wasted minute.
 ### Filling a Tesco basket
 
 Off by default, local only, and never in the published demo — which has no
-server and so has no path to a supermarket session at all. Turn it on for a
-session:
+server and so has no path to a supermarket session at all.
+
+Try it first in **practice mode**, which runs the whole flow against invented
+Tesco products and sends nothing anywhere:
+
+```bash
+$env:TESCO_BASKET = "practice"
+node web/server.ts
+```
+
+The practice products are deliberately awkward — every ingredient comes back
+alongside a wrong-size version of itself, and anything with a specification
+like "5% fat" also comes back with a different one — so it shows whether the
+matching holds up, not just that the buttons work.
+
+When you are happy, for real:
 
 ```bash
 $env:TESCO_BASKET = "1"

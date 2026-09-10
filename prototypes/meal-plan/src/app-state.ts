@@ -482,6 +482,8 @@ export function createApp(
           body: {
             ...plan,
             available: basketHooks.available,
+            // Which provider, so the screen can say plainly when it is practice.
+            provider: basketHooks.provider?.id ?? null,
             signedIn: basketHooks.signedIn ? await basketHooks.signedIn() : false,
           },
         };
@@ -494,15 +496,16 @@ export function createApp(
         const ingredient = getIngredient(body.ingredientId);
         if (!ingredient) return bad(404, `No ingredient "${body.ingredientId}"`);
         try {
-          const found = await basketHooks.provider.search(
-            body.term?.trim() || searchTermFor(ingredient),
-            12,
-          );
+          // Returned alongside the results so the screen can show — and let a
+          // person edit — the words that were actually searched for.
+          const term = body.term?.trim() || searchTermFor(ingredient);
+          const found = await basketHooks.provider.search(term, 12);
           return {
             status: 200,
             body: {
               candidates: rankCandidates(ingredient, body.packSize, found),
               confident: CONFIDENT,
+              term,
             },
           };
         } catch (error) {

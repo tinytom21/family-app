@@ -134,6 +134,18 @@ async function withProviderNamed<T>(
  * this.
  */
 const basket: BasketHooks = await (async () => {
+  // Practice mode: the whole flow against invented Tesco products, so the
+  // screen can be tried — and changed — without a real account in the loop.
+  if (process.env.TESCO_BASKET === "practice") {
+    const { PracticeBasket } = await import("../src/integrations/practice-basket.ts");
+    const provider = new PracticeBasket();
+    return {
+      available: true,
+      provider,
+      signedIn: async () => true,
+      signIn: async () => {},
+    };
+  }
   if (process.env.TESCO_BASKET !== "1") return { available: false };
   const { TescoBasket } = await import("../src/integrations/tesco.ts");
   const provider = new TescoBasket({ profileDir: process.env.TESCO_PROFILE_DIR });
@@ -261,8 +273,10 @@ server.listen(PORT, () => {
           "  Everything else works without a model.\n",
   );
   console.log(
-    basket.available
-      ? "  Tesco basket filling is ON for this session.\n"
-      : "  Tesco basket filling is off. Set TESCO_BASKET=1 to enable it.\n",
+    !basket.available
+      ? "  Tesco basket filling is off. Set TESCO_BASKET=practice to try it, or =1 for real.\n"
+      : basket.provider?.id === "practice"
+        ? "  Tesco basket: PRACTICE mode — invented products, nothing is sent to Tesco.\n"
+        : "  Tesco basket filling is ON for this session.\n",
   );
 });

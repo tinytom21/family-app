@@ -139,7 +139,14 @@ test("confirmed products become basket quantities from the pack solver", () => {
   );
 
   assert.deepEqual(plan.items, [
-    { sku: "tesco-123", title: "A tomato-tinned", quantity: 4, ingredientId: "tomato-tinned" },
+    {
+      sku: "tesco-123",
+      title: "A tomato-tinned",
+      quantity: 4,
+      ingredientId: "tomato-tinned",
+      packSize: 400,
+      packLabel: "400 g tin",
+    },
   ]);
   assert.deepEqual(plan.needsChoosing, []);
 });
@@ -218,4 +225,31 @@ test("a bare number is a size and does not count as a match", () => {
   const mince = requireIngredient("beef-mince");
   const irrelevant = scoreMatch(mince, 500, product("Tesco Kitchen Foil 500g"));
   assert.ok(irrelevant.score < CONFIDENT, `scored ${irrelevant.score}`);
+});
+
+test("only a whole-name, right-size match is ticked on the family's behalf", () => {
+  const mince = requireIngredient("beef-mince");
+  const ranked = rankCandidates(mince, 500, [
+    product("Tesco Lean Beef Mince 5% Fat 500g", "right"),
+    product("Tesco Beef Mince 20% Fat 500g", "wrong-spec"),
+    product("Tesco Lean Beef Mince 5% Fat 1.5kg", "wrong-size"),
+  ]);
+  const by = (sku: string) => ranked.find((r) => r.product.sku === sku)!;
+
+  assert.equal(by("right").preselect, true);
+  // Both of these clear the score threshold comfortably, and both would turn
+  // up in a delivery as the wrong thing if they were ticked by default.
+  assert.equal(by("wrong-spec").preselect, false, `scored ${by("wrong-spec").score}`);
+  assert.equal(by("wrong-size").preselect, false, `scored ${by("wrong-size").score}`);
+});
+
+test("when the right size is not in the results, nothing is ticked", () => {
+  // The top result is then a wrong size, and pre-selecting "the best we have"
+  // is how 1.5 kg of mince replaces 500 g without anyone noticing.
+  const mince = requireIngredient("beef-mince");
+  const ranked = rankCandidates(mince, 500, [
+    product("Tesco Lean Beef Mince 5% Fat 1.5kg"),
+    product("Tesco Lean Beef Mince 5% Fat 250g"),
+  ]);
+  assert.equal(ranked.some((r) => r.preselect), false);
 });

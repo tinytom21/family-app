@@ -49,6 +49,7 @@
         <input type="checkbox" id="restock">
         <span>Restock staples</span>
       </label>
+      <button type="button" id="basket" class="btn">Basket</button>
       <button type="button" id="account" class="btn">Account</button>
       <button type="button" id="who" class="btn">Who lives here</button>
       <button type="button" id="calendar" class="btn">Connect calendar</button>
@@ -91,6 +92,18 @@
     <button type="button" id="account-close" class="btn">Done</button>
   </div>
   <div id="account-body" class="account-body"></div>
+</section>
+
+<!-- Filling a supermarket basket. Local server only; hidden until asked for. -->
+<section id="basket-panel" class="grid-panel" aria-labelledby="h-basket" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-basket">Basket</h2>
+      <p id="basket-sub" class="grid-sub"></p>
+    </div>
+    <button type="button" id="basket-close" class="btn">Done</button>
+  </div>
+  <div id="basket-body" class="account-body"></div>
 </section>
 
 <!-- Profiles. Hidden until asked for; this is setup, not daily use. -->
