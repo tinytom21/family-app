@@ -86,10 +86,19 @@ persists at `~/.basketeer/session.json`. That file is **plain text and can act
 on your grocery account** — worth knowing before running this on a shared
 machine.
 
-The Basket panel shows what it can match and what it cannot. You confirm a
-product once per ingredient and pack size; the choice is remembered, so week two
-is a single click. Anything unmatched is listed rather than guessed at, because
-a wrong guess arrives in a delivery.
+In the Basket panel, **Find all on Tesco** searches every line. A 100% match —
+every word of the name, the exact size, and in stock — goes straight in, marked
+*matched automatically* so you can see which ones nobody looked at. Everything
+else is laid out with its options, the best one ticked where there is a
+sensible best, each with Tesco's shelf price, price per kilo or litre, any
+Clubcard offer, and a link to the product's page. Choices are remembered per
+ingredient and pack size, so week two is mostly one click. Anything can be
+changed.
+
+When two products are both a 100% match — own brand and Finest at the same
+size, say — it takes the one Tesco lists first. When the best match is out of
+stock it chooses nothing, because remembering this week's substitute as your
+usual is a decision for a person.
 
 **Nothing here spends money.** Filling sets quantities — pressing it twice
 leaves one week's shopping, not two — and checkout returns a URL for you to go
@@ -204,11 +213,13 @@ starts, sheets every couple of weeks"* — and **Add with AI** splits it into
 dated, assigned, correctly-anchored jobs. That button needs a model key; **Add
 as one job** does not.
 
-There are no prices anywhere. Pack *sizes* are worth modelling because a 400 g
-tin is a 400 g tin wherever you shop; pack *prices* are not, and a total that is
-confidently wrong is worse than no total. So the list tells you what to put in
-the trolley, and the pack solver minimises what ends up in the bin rather than
-what it costs.
+The app keeps no prices of its own. Pack *sizes* are worth modelling because a
+400 g tin is a 400 g tin wherever you shop; pack *prices* are not, and a total
+that is confidently wrong is worse than no total. So the list tells you what to
+put in the trolley, and the pack solver minimises what ends up in the bin rather
+than what it costs. The one place a price appears is the local Basket panel, and
+it is Tesco's own shelf price at the moment of searching: shown beside each
+product to help you choose, never added up, and dated once it is old.
 
 Everything except the two AI buttons runs without an API key.
 

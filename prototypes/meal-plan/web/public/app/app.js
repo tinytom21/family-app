@@ -1228,15 +1228,21 @@ function showCode(row, code) {
  *
  * The panel does no matching of its own. It asks what is ready and what still
  * needs a person, fetches ranked candidates when asked, and records a choice
- * when one is made. The only judgement it applies is presentational: the top
- * candidate is pre-selected when the domain says it is confident, and never
- * otherwise — a pre-ticked wrong answer is how the wrong mince gets ordered.
+ * when one is made. "Find all" is only a loop with a progress count: whether a
+ * match is sure enough to go straight in is decided by the server, and the
+ * panel reports what it did. Prices are shown exactly as Tesco gave them, and
+ * nothing here adds them up.
  */
 let basketPlan = null;
 let basketResult = null;
+/** While "Find all" runs, and afterwards as its report: { running, done, total, linked, stopped }. */
+let basketFinding = null;
 const basketSearches = new Map();
 
 const basketKey = (line) => `${line.ingredientId}|${line.packSize}`;
+
+/** Options shown before "Show more": enough to compare, not a wall of mince. */
+const FIRST_OPTIONS = 5;
 
 async function refreshBasket() {
   try {
@@ -1300,25 +1306,34 @@ function drawBasket() {
     ? "Practice mode — invented products, nothing is sent to Tesco."
     : "Signed in to Tesco.";
 
-  /* where things stand, and the two things you can do about it */
+  /* where things stand, and what you can do about it */
+  const finding = Boolean(basketFinding?.running);
+  const toChoose = plan.needsChoosing.length;
   const summary = el("div", "basket-summary");
   summary.append(
     el("span", "basket-count", `${plan.items.length} ready`),
-    el(
-      "span",
-      `basket-count${plan.needsChoosing.length ? " attention" : ""}`,
-      `${plan.needsChoosing.length} to choose`,
-    ),
+    el("span", `basket-count${toChoose ? " attention" : ""}`, `${toChoose} to choose`),
   );
+  // The button to press first while anything is unchosen, and Fill after.
+  const findAll = button(
+    practice ? "Find all in the practice shop" : "Find all on Tesco",
+    toChoose > 0,
+    findAllProducts,
+  );
+  findAll.disabled = busy || finding || toChoose === 0;
+  findAll.title = toChoose
+    ? "Puts 100% matches straight in and lays out the options for the rest"
+    : "Every line already has a product";
   const fill = button(
     practice ? "Fill practice basket" : "Fill Tesco basket",
-    true,
+    toChoose === 0,
     async () => {
+      basketFinding = null;
       basketResult = await api.post("/api/basket/fill", {});
       drawBasket();
     },
   );
-  fill.disabled = busy || plan.items.length === 0;
+  fill.disabled = busy || finding || plan.items.length === 0;
   fill.title = plan.items.length
     ? "Sets each quantity, so pressing it twice does not double the order"
     : "Choose some products first";
@@ -1331,8 +1346,14 @@ function drawBasket() {
     // Opens Tesco's own checkout. Paying happens there, with a person looking.
     window.open(url, "_blank", "noopener");
   });
-  summary.append(fill, checkout);
+  summary.append(findAll, fill, checkout);
+  if (finding) {
+    const at = Math.min(basketFinding.done + 1, basketFinding.total);
+    summary.append(el("span", "basket-progress", `Searching ${at} of ${basketFinding.total}…`));
+  }
   body.append(summary);
+
+  if (basketFinding && !finding) body.append(findingReport(basketFinding, toChoose));
 
   if (basketResult) {
     const result = el("div", `basket-result${basketResult.failed.length ? " partial" : ""}`);
@@ -1357,80 +1378,129 @@ function drawBasket() {
     body.append(result);
   }
 
-  if (plan.needsChoosing.length) {
-    body.append(el("h3", "subhead", "Choose once — remembered after"));
+  // Both lists share one set of columns, so the lines still to choose line up
+  // with the products already chosen below them.
+  const lines = el("div", "basket-lines");
+  if (toChoose) {
+    lines.append(
+      el(
+        "h3",
+        "subhead",
+        basketFinding
+          ? "Not a 100% match — choose once, remembered after"
+          : "Choose once — remembered after",
+      ),
+    );
     const list = el("ul", "basket-list");
-    for (const need of plan.needsChoosing) list.append(needRow(need));
-    body.append(list);
+    for (const need of plan.needsChoosing) list.append(basketRow(need, null));
+    lines.append(list);
   }
-
   if (plan.items.length) {
-    body.append(el("h3", "subhead", "Ready to add"));
+    lines.append(el("h3", "subhead", "Ready to add"));
     const list = el("ul", "basket-list");
-    for (const item of plan.items) {
-      const row = el("li", "basket-row");
-      row.append(
-        el("span", "basket-name", item.title),
-        el("span", "basket-qty", `${item.quantity} × ${item.packLabel}`),
-        button("Change", false, async () => {
-          await call("/api/basket/unlink", {
-            ingredientId: item.ingredientId,
-            packSize: item.packSize,
-          });
-          await refreshBasket();
-        }),
-      );
-      list.append(row);
-    }
-    body.append(list);
+    for (const item of plan.items) list.append(basketRow(item, item));
+    lines.append(list);
   }
+  body.append(lines);
 }
 
-function needRow(need) {
-  const key = basketKey(need);
-  const search = basketSearches.get(key);
-  const row = el("li", "basket-row need");
-  row.append(
-    el("span", "basket-name", need.name),
-    el("span", "basket-qty", `${need.quantity} × ${need.packLabel}`),
+/** What "Find all" did, in a sentence or two. */
+function findingReport(finding, toChoose) {
+  const box = el("div", `basket-result${finding.stopped ? " partial" : ""}`);
+  box.append(
+    el(
+      "strong",
+      null,
+      finding.linked ? `Matched ${finding.linked} automatically.` : "Nothing was a 100% match.",
+    ),
   );
-
-  if (!search) {
-    row.append(button("Find on Tesco", false, () => findCandidates(need)));
-    return row;
-  }
-  if (search.loading) {
-    row.append(el("span", "basket-loading", "Searching…"));
-    return row;
-  }
-
-  const picker = el("div", "basket-candidates");
-  if (search.error) picker.append(el("p", "basket-error", search.error));
-  if (!search.error && search.candidates.length === 0) {
-    picker.append(el("p", "account-note", "Nothing came back for that. Try other words."));
-  }
-
-  for (const candidate of search.candidates) {
-    // Highlighted only when it is the app's suggestion. A border on every
-    // plausible-looking product would say nothing at all.
-    const confident = candidate.product.sku === search.suggested;
-    const label = el("label", `basket-cand${confident ? " confident" : ""}`);
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = `pick-${key}`;
-    radio.value = candidate.product.sku;
-    radio.checked = search.selected === candidate.product.sku;
-    radio.addEventListener("change", () => {
-      search.selected = candidate.product.sku;
-    });
-    const text = el("span", "basket-cand-text");
-    text.append(
-      el("span", "basket-cand-title", candidate.product.title),
-      // The reason is shown so a person can disagree with it, not just the number.
-      el("span", "basket-cand-why", `${Math.round(candidate.score * 100)}% · ${candidate.why}`),
+  if (finding.stopped) {
+    box.append(el("span", null, ` Stopped at ${finding.stopped.name}: ${finding.stopped.why}`));
+  } else if (toChoose) {
+    box.append(
+      el(
+        "span",
+        null,
+        ` ${toChoose} need${toChoose === 1 ? "s" : ""} you to choose. The options are below.`,
+      ),
     );
-    label.append(radio, text);
-    picker.append(label);
+  } else {
+    box.append(el("span", null, " Every line has a product."));
+  }
+  return box;
+}
+
+/**
+ * One line of the list: what it asked for and how many, and once a product is
+ * chosen, which product, at what price, with a link to check it against the
+ * label. The same row serves both lists, so changing a choice looks exactly
+ * like making one.
+ */
+function basketRow(line, item) {
+  const search = basketSearches.get(basketKey(line));
+  const row = el("li", "basket-row");
+
+  const name = el("span", "basket-name");
+  if (item) {
+    name.append(el("span", null, item.title), el("span", "basket-for", `for ${item.name}`));
+    if (item.auto) name.append(el("span", "basket-auto", "Matched automatically"));
+  } else {
+    name.append(el("span", null, line.name));
+  }
+
+  const actions = el("div", "basket-actions");
+  row.append(
+    name,
+    el("span", "basket-qty", `${line.quantity} × ${line.packLabel}`),
+    // An empty cell still holds the column, so every row lines up.
+    item ? priceTag(item.price, item.chosenOn) : el("span", "basket-price"),
+    actions,
+  );
+  if (item) {
+    const page = productLink(item.url, item.title);
+    if (page) actions.append(page);
+  }
+
+  if (search?.loading) {
+    actions.append(el("span", "basket-loading", "Searching…"));
+    return row;
+  }
+  if (!search) {
+    const open = button(item ? "Change" : "Find on Tesco", false, () =>
+      findCandidates(line, undefined, item?.sku),
+    );
+    open.disabled = Boolean(basketFinding?.running);
+    actions.append(open);
+    return row;
+  }
+
+  row.append(optionsFor(line, item, search));
+  return row;
+}
+
+/** The ranked options for one line, and the ways to act on them. */
+function optionsFor(line, item, search) {
+  const key = basketKey(line);
+  const box = el("div", "basket-candidates");
+  if (search.error) box.append(el("p", "basket-error", search.error));
+  if (!search.error && search.candidates.length === 0) {
+    box.append(el("p", "account-note", "Nothing came back for that. Try other words."));
+  }
+
+  // The first few, plus the ticked one if it sits further down.
+  const shown = search.expanded
+    ? search.candidates
+    : search.candidates.filter((c, i) => i < FIRST_OPTIONS || c.product.sku === search.selected);
+  for (const candidate of shown) box.append(optionRow(key, search, candidate));
+  const hidden = search.candidates.length - shown.length;
+  if (hidden > 0) {
+    const more = el("button", "mini basket-more", `Show ${hidden} more`);
+    more.type = "button";
+    more.addEventListener("click", () => {
+      search.expanded = true;
+      drawBasket();
+    });
+    box.append(more);
   }
 
   const tools = el("div", "basket-cand-actions");
@@ -1438,14 +1508,16 @@ function needRow(need) {
     button("Use this one", true, async () => {
       const chosen = search.candidates.find((c) => c.product.sku === search.selected);
       if (!chosen) {
-        setStatus(`Pick a product for ${need.name} first.`, true);
+        setStatus(`Pick a product for ${line.name} first.`, true);
         return;
       }
       await call("/api/basket/link", {
-        ingredientId: need.ingredientId,
-        packSize: need.packSize,
+        ingredientId: line.ingredientId,
+        packSize: line.packSize,
         sku: chosen.product.sku,
         title: chosen.product.title,
+        url: chosen.product.url,
+        price: chosen.product.price,
       });
       basketSearches.delete(key);
       await refreshBasket();
@@ -1457,17 +1529,17 @@ function needRow(need) {
   input.type = "text";
   input.value = search.term ?? "";
   input.placeholder = "Search Tesco for…";
-  input.setAttribute("aria-label", `Search Tesco for ${need.name}`);
+  input.setAttribute("aria-label", `Search Tesco for ${line.name}`);
   const again = el("button", "mini", "Search again");
   again.type = "submit";
   retry.append(input, again);
   retry.addEventListener("submit", (event) => {
     event.preventDefault();
-    findCandidates(need, input.value);
+    findCandidates(line, input.value, item?.sku);
   });
   tools.append(retry);
 
-  const close = el("button", "mini", "Not now");
+  const close = el("button", "mini", item ? "Keep the current one" : "Not now");
   close.type = "button";
   close.addEventListener("click", () => {
     basketSearches.delete(key);
@@ -1475,43 +1547,174 @@ function needRow(need) {
   });
   tools.append(close);
 
-  picker.append(tools);
-  row.append(picker);
-  return row;
+  box.append(tools);
+  return box;
 }
 
-async function findCandidates(need, term) {
-  const key = basketKey(need);
+function optionRow(key, search, candidate) {
+  const { product } = candidate;
+  const classes = ["basket-cand"];
+  // Highlighted only when it is the app's suggestion. A border on every
+  // plausible-looking product would say nothing at all.
+  if (product.sku === search.suggested) classes.push("confident");
+  if (product.available === false) classes.push("unavailable");
+  const option = el("div", classes.join(" "));
+
+  const pick = el("label", "basket-cand-pick");
+  const radio = document.createElement("input");
+  radio.type = "radio";
+  radio.name = `pick-${key}`;
+  radio.value = product.sku;
+  radio.checked = search.selected === product.sku;
+  radio.addEventListener("change", () => {
+    search.selected = product.sku;
+  });
+  const text = el("span", "basket-cand-text");
+  text.append(
+    el("span", "basket-cand-title", product.title),
+    // The reason is shown so a person can disagree with it, not just the number.
+    el("span", "basket-cand-why", `${Math.round(candidate.score * 100)}% · ${candidate.why}`),
+  );
+  if (product.offer) text.append(el("span", "basket-cand-offer", product.offer));
+  pick.append(radio, text, priceTag(product.price));
+  option.append(pick);
+
+  // Outside the label, so opening the page never changes the choice.
+  const page = productLink(product.url, product.title);
+  if (page) option.append(page);
+  return option;
+}
+
+const pounds = (amount) => `£${amount.toFixed(2)}`;
+
+/**
+ * Tesco's price, as Tesco gave it. A remembered price carries the date it was
+ * seen, because last month's price passed off as today's is exactly the
+ * confidently wrong number this app refuses to show.
+ */
+function priceTag(price, seenOn) {
+  const tag = el("span", "basket-price");
+  if (!price) return tag;
+  tag.append(el("span", "basket-price-each", pounds(price.each)));
+  if (price.perUnit != null && price.unit) {
+    const per =
+      price.unit === "each" ? `${pounds(price.perUnit)} each` : `${pounds(price.perUnit)}/${price.unit}`;
+    tag.append(el("span", "basket-price-unit", per));
+  }
+  if (seenOn && seenOn !== latestState?.today) {
+    tag.append(el("span", "basket-price-unit", `on ${dateFormat.format(asDate(seenOn))}`));
+  }
+  return tag;
+}
+
+/**
+ * A link to the product's own page, so a match can be checked against the
+ * label. Drawn only for https: links live in household state, which every
+ * member of the household can write.
+ */
+function productLink(url, title) {
+  let safe = false;
+  try {
+    safe = new URL(url).protocol === "https:";
+  } catch {
+    safe = false;
+  }
+  if (!safe) return null;
+  const link = el("a", "basket-link", "View on Tesco ↗");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", `View ${title} on Tesco, in a new tab`);
+  return link;
+}
+
+async function findCandidates(line, term, keep) {
+  const key = basketKey(line);
   basketSearches.set(key, { loading: true, term });
   drawBasket();
   try {
     const found = await api.post("/api/basket/candidates", {
-      ingredientId: need.ingredientId,
-      packSize: need.packSize,
+      ingredientId: line.ingredientId,
+      packSize: line.packSize,
       term,
     });
-    // The first candidate the domain is willing to tick, if there is one. Not
-    // simply the top score: when the right size is missing from the results,
-    // the top result is the wrong one, and a pre-ticked wrong answer gets
-    // accepted without anybody reading it.
-    const suggestion = found.candidates.find((c) => c.preselect);
-    basketSearches.set(key, {
-      candidates: found.candidates,
-      confident: found.confident,
-      term: found.term,
-      suggested: suggestion?.product.sku ?? null,
-      selected: suggestion?.product.sku ?? null,
-    });
+    basketSearches.set(key, searchState(found, keep));
   } catch (error) {
     basketSearches.set(key, {
       candidates: [],
-      confident: 1,
       term: term ?? "",
       error: error.message,
       selected: null,
     });
   }
   drawBasket();
+}
+
+/**
+ * What to show for one search.
+ *
+ * The suggestion is the first candidate the domain is willing to tick, not
+ * simply the top score: when the right size is missing from the results, the
+ * top result is the wrong one, and a pre-ticked wrong answer gets accepted
+ * without anybody reading it. When changing a choice, the current product stays
+ * ticked if it came back, so "Change" never quietly becomes "replace".
+ */
+function searchState(found, keep) {
+  const suggestion = found.candidates.find((c) => c.preselect);
+  const kept = keep ? found.candidates.find((c) => c.product.sku === keep) : undefined;
+  return {
+    candidates: found.candidates,
+    term: found.term,
+    suggested: suggestion?.product.sku ?? null,
+    selected: (kept ?? suggestion)?.product.sku ?? null,
+    expanded: false,
+  };
+}
+
+/**
+ * Search every line that still needs a product, one at a time.
+ *
+ * One at a time on purpose: it is somebody else's shop, and the server spaces
+ * requests out anyway. A line moves to "Ready" the moment it is matched, so
+ * the counts are the progress bar. It stops at the first failure rather than
+ * repeating it — an expired session would otherwise show the same error for
+ * every line on the list.
+ */
+async function findAllProducts() {
+  const lines = [...(basketPlan?.needsChoosing ?? [])];
+  if (!lines.length) return;
+  basketResult = null;
+  basketFinding = { running: true, done: 0, total: lines.length, linked: 0, stopped: null };
+
+  for (const line of lines) {
+    const key = basketKey(line);
+    // Keep any words a person already changed the search to.
+    const term = basketSearches.get(key)?.term;
+    basketSearches.set(key, { loading: true, term });
+    drawBasket();
+    try {
+      const found = await api.post("/api/basket/match", {
+        ingredientId: line.ingredientId,
+        packSize: line.packSize,
+        term,
+      });
+      basketFinding.done++;
+      if (found.linked) {
+        basketFinding.linked++;
+        basketSearches.delete(key);
+        await refreshBasket();
+      } else {
+        basketSearches.set(key, searchState(found));
+      }
+    } catch (error) {
+      basketSearches.delete(key);
+      basketFinding.stopped = { name: line.name, why: error.message };
+      break;
+    }
+  }
+
+  basketFinding.running = false;
+  await refreshBasket();
 }
 
 /* ---------------- first run ---------------- */

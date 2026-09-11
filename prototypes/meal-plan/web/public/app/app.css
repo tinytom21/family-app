@@ -745,39 +745,95 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .basket-result.partial { background: var(--open-soft); color: var(--open); }
 .basket-result ul { padding: .3rem 0 0 1rem; list-style: disc; }
 
-.basket-list { display: flex; flex-direction: column; width: 100%; }
+.basket-progress { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); }
+
+/* One grid shared by both lists and every row in them, so names, sizes,
+   prices and buttons line up all the way down, and each button sits beside the
+   line it belongs to rather than out at the far edge of a wide screen. */
+.basket-lines {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) max-content max-content max-content;
+  justify-content: start;
+  column-gap: 1rem;
+  width: 100%;
+}
+.basket-lines > .subhead { grid-column: 1 / -1; }
+.basket-list { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
 .basket-row {
-  display: grid; grid-template-columns: 1fr auto auto;
-  gap: .3rem .7rem; align-items: center;
-  padding: .5rem 0; border-bottom: 1px solid var(--rule);
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: subgrid;
+  row-gap: .4rem; align-items: center;
+  padding: .55rem 0; border-bottom: 1px solid var(--rule);
 }
 .basket-row:last-child { border-bottom: none; }
-.basket-name { font-weight: 600; font-size: .86rem; min-width: 0; }
+.basket-name {
+  display: flex; flex-direction: column; min-width: 0;
+  font-weight: 600; font-size: .86rem;
+}
+.basket-for { font-weight: 400; font-size: .74rem; color: var(--ink-faint); }
+.basket-auto {
+  font-family: var(--mono); font-size: .58rem; font-weight: 400;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--accent);
+}
 .basket-qty {
   font-family: var(--mono); font-size: .7rem; color: var(--ink-faint);
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }
+.basket-actions { display: flex; gap: .7rem; align-items: center; flex-wrap: wrap; }
 .basket-loading { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); }
+
+.basket-price {
+  display: flex; flex-direction: column; align-items: flex-end;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.basket-price-each { font-family: var(--mono); font-size: .78rem; color: var(--ink); }
+.basket-price-unit { font-family: var(--mono); font-size: .6rem; color: var(--ink-faint); }
+
+.basket-link {
+  font-family: var(--mono); font-size: .6rem;
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  color: var(--ink-faint); text-decoration: none;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.basket-link:hover, .basket-link:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* the ranked choices for one line */
 .basket-candidates {
   grid-column: 1 / -1;
+  /* Sized by the columns above and never the other way round: a long product
+     title must not widen the price column for every row in the list. */
+  contain: inline-size; min-width: 0;
   display: flex; flex-direction: column; gap: .3rem;
   padding: .45rem .55rem; border-radius: 5px;
   background: var(--surface-alt);
 }
 .basket-cand {
-  display: flex; gap: .5rem; align-items: flex-start;
-  padding: .3rem .4rem; border-radius: 4px; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: .3rem .7rem; align-items: start;
+  padding: .3rem .4rem; border-radius: 4px;
   border: 1px solid transparent;
 }
 .basket-cand:hover { border-color: var(--rule-strong); }
-/* confident enough to have been pre-selected — say so visibly */
+/* the app's suggestion — say so visibly */
 .basket-cand.confident { border-color: var(--accent); }
+.basket-cand-pick {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: .5rem; align-items: start; cursor: pointer;
+}
 .basket-cand input { margin-top: .2rem; accent-color: var(--accent); }
 .basket-cand-text { display: flex; flex-direction: column; min-width: 0; }
 .basket-cand-title { font-size: .84rem; }
 .basket-cand-why { font-family: var(--mono); font-size: .6rem; color: var(--ink-faint); }
+.basket-cand-offer { font-size: .72rem; color: var(--accent); }
+.basket-cand.unavailable .basket-cand-title,
+.basket-cand.unavailable .basket-price-each { color: var(--ink-faint); }
+.basket-cand .basket-link { margin-top: .3rem; }
+.basket-more { align-self: flex-start; }
+
+@media (max-width: 600px) {
+  .basket-lines { grid-template-columns: minmax(0, 1fr) max-content; }
+  .basket-name, .basket-actions { grid-column: 1 / -1; }
+}
 .basket-cand-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; padding-top: .3rem; }
 .basket-retry { display: flex; gap: .35rem; flex-wrap: wrap; }
 .basket-retry input {

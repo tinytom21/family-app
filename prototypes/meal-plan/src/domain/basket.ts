@@ -7,10 +7,11 @@
  *
  * The hard part is matching. The list says "240 g of baby spinach"; Tesco has
  * fourteen spinaches in four sizes, and picking the wrong one is not a crash —
- * it is a delivery containing the wrong thing, noticed on Thursday. Nothing
- * here guesses on the family's behalf: it scores candidates, sorts them, and
- * hands the decision to a person once per ingredient. Confirmed choices are
- * remembered, so the second week costs nothing and the tenth is instant.
+ * it is a delivery containing the wrong thing, noticed on Thursday. So only a
+ * 100% match — every word of the name, the exact size, and actually for sale —
+ * is ever put in without a person looking. Everything else is scored, sorted
+ * and handed to a person once per ingredient. Choices are remembered, so the
+ * second week costs nothing and the tenth is instant.
  *
  * Deliberately knows nothing about how the basket is filled — see
  * `BasketProvider`. Whether that is a browser session or a reverse-engineered
@@ -18,7 +19,21 @@
  */
 
 import type { CanonicalIngredient, ShoppingLine } from "./types.ts";
-import { searchTermFor } from "./retailers.ts";
+
+/**
+ * What the shelf label said when the product was searched for.
+ *
+ * Shown to help choose between two products, and never added up. Prices move
+ * every week, so a stored one is only ever shown with the date it was seen.
+ */
+export interface ShelfPrice {
+  /** Pounds for one pack. */
+  readonly each: number;
+  /** Pounds per `unit`, as the retailer states it. Never worked out here. */
+  readonly perUnit?: number;
+  /** What `perUnit` is per, in the retailer's words: "kg", "litre", "each". */
+  readonly unit?: string;
+}
 
 /** One product as a retailer describes it. */
 export interface RetailerProduct {
@@ -26,6 +41,13 @@ export interface RetailerProduct {
   readonly title: string;
   /** Size in the retailer's own words, when it is separate from the title. */
   readonly size?: string;
+  readonly price?: ShelfPrice;
+  /** A promotion in the retailer's words, such as "£3.50 Clubcard Price". */
+  readonly offer?: string;
+  /** The product's own page, for reading the label before trusting a match. */
+  readonly url?: string;
+  /** False when the retailer says it cannot be bought. Unknown is not false. */
+  readonly available?: boolean;
 }
 
 /** A confirmed ingredient-and-pack to product mapping. */
@@ -36,6 +58,11 @@ export interface ProductLink {
   readonly sku: string;
   readonly title: string;
   readonly confirmedOn: string;
+  readonly url?: string;
+  /** The price on `confirmedOn` — not today's. */
+  readonly price?: ShelfPrice;
+  /** Put in by "Find all" as a 100% match, rather than chosen by a person. */
+  readonly auto?: boolean;
 }
 
 export interface ParsedSize {
@@ -104,6 +131,11 @@ export interface Scored {
    * the size did not disagree. Deliberately stricter than any score threshold.
    */
   readonly preselect: boolean;
+  /**
+   * A 100% match that can be bought: every word, the exact size, and not marked
+   * unavailable. The only kind of match put in without anybody looking.
+   */
+  readonly perfect: boolean;
   /** Why it scored that way, so a person can disagree with a reason. */
   readonly why: string;
 }
@@ -170,6 +202,7 @@ export function scoreMatch(
   let hits = 0;
   for (const word of wanted) if (got.has(word)) hits++;
   const nameScore = wanted.size ? hits / wanted.size : 0;
+  const wholeName = wanted.size > 0 && hits === wanted.size;
 
   const size = parseSize(product.size ?? product.title);
   let sizeScore = 0.5; // unknown is neither good nor damning
@@ -188,6 +221,11 @@ export function scoreMatch(
     }
   }
 
+  // The score stays a measure of the match. Whether it can be bought is a
+  // separate fact, and folding it in would rank the right product below a
+  // wrong one on the day it happens to be out of stock.
+  const buyable = product.available !== false;
+
   return {
     product,
     score: Number((nameScore * 0.7 + sizeScore * 0.3).toFixed(3)),
@@ -197,8 +235,11 @@ export function scoreMatch(
     // same mince in the wrong size scores 0.75 — both comfortably over any
     // sensible threshold, and both would arrive in a delivery as the wrong
     // thing for somebody who clicked through without reading the label.
-    preselect: wanted.size > 0 && hits === wanted.size && sizeScore > 0.15,
-    why: `${hits}/${wanted.size} words matched, ${sizeWhy}`,
+    preselect: buyable && wholeName && sizeScore > 0.15,
+    // Stricter again, because nobody reads it at all: a close size or an
+    // unstated one is worth a tick for a person to confirm, not a purchase.
+    perfect: buyable && wholeName && sizeScore === 1,
+    why: `${hits}/${wanted.size} words matched, ${sizeWhy}${buyable ? "" : ", not available"}`,
   };
 }
 
@@ -207,11 +248,57 @@ export function rankCandidates(
   packSize: number,
   products: readonly RetailerProduct[],
 ): Scored[] {
+  // Ties keep the retailer's order, which reflects what people actually buy.
+  // Alphabetical order reflected nothing and quietly favoured whichever brand
+  // started with A.
   return products
     .map((p) => scoreMatch(ingredient, packSize, p))
-    .sort(
-      (a, b) => b.score - a.score || a.product.title.localeCompare(b.product.title),
-    );
+    .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * The product to put in the basket without asking, or null.
+ *
+ * Only ever the top-ranked candidate, and only when it is `perfect`. When
+ * several products match exactly — own brand and Finest, both 500 g — the
+ * retailer's own order decides, and the link is marked `auto` so the screen
+ * can say it was nobody's choice. When the best match is out of stock, nothing
+ * is chosen: the next exact match is a substitution, and remembering a
+ * substitution as the family's usual is a decision for a person.
+ */
+export function autoMatch(ranked: readonly Scored[]): Scored | null {
+  return ranked[0]?.perfect ? ranked[0] : null;
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * Links and prices arrive in household state, which every member of the
+ * household can write — so they are checked on the way in, whoever sent them.
+ */
+export function cleanProductUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    // A `javascript:` link drawn as "View on Tesco" is a script run by whoever
+    // clicks it. Retailers serve their pages over https; nothing else is needed.
+    return url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function cleanShelfPrice(value: unknown): ShelfPrice | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { each, perUnit, unit } = value as Record<string, unknown>;
+  const money = (n: unknown): n is number =>
+    typeof n === "number" && Number.isFinite(n) && n >= 0;
+  if (!money(each)) return undefined;
+  return {
+    each,
+    ...(money(perUnit) ? { perUnit } : {}),
+    ...(typeof unit === "string" && unit.trim() ? { unit: unit.trim().slice(0, 16) } : {}),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -221,9 +308,16 @@ export interface BasketItem {
   readonly title: string;
   readonly quantity: number;
   readonly ingredientId: string;
+  /** What the list asked for, so a person can check the product against it. */
+  readonly name: string;
   /** Which pack this is, so a choice can be changed without guessing which one. */
   readonly packSize: number;
   readonly packLabel: string;
+  /** When it was chosen, which is also when its price was seen. */
+  readonly chosenOn: string;
+  readonly url?: string;
+  readonly price?: ShelfPrice;
+  readonly auto?: boolean;
 }
 
 export interface NeedsChoosing {
@@ -268,8 +362,13 @@ export function planBasket(
           title: link.title,
           quantity: count,
           ingredientId: line.ingredientId,
+          name: line.name,
           packSize: pack.size,
           packLabel: pack.label,
+          chosenOn: link.confirmedOn,
+          ...(link.url ? { url: link.url } : {}),
+          ...(link.price ? { price: link.price } : {}),
+          ...(link.auto ? { auto: true } : {}),
         });
       } else {
         needsChoosing.push({

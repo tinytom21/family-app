@@ -52,7 +52,14 @@ import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
 import { nextWeekStart, redatePlan, todayIn } from "./domain/week.ts";
 import { linksFor, searchTermFor } from "./domain/retailers.ts";
-import { CONFIDENT, planBasket, rankCandidates } from "./domain/basket.ts";
+import {
+  CONFIDENT,
+  autoMatch,
+  cleanProductUrl,
+  cleanShelfPrice,
+  planBasket,
+  rankCandidates,
+} from "./domain/basket.ts";
 import type { BasketProvider, ProductLink } from "./domain/basket.ts";
 import { getIngredient } from "./domain/catalogue.ts";
 import {
@@ -401,6 +408,37 @@ export function createApp(
 
   /* ---------------------------------------------------------------- */
 
+  /**
+   * Remember which product answers a line. One link per ingredient and pack
+   * size, so choosing again replaces rather than adds. The link and price are
+   * checked here whoever sent them: household state is shared, and a stored
+   * `javascript:` link would run in the next member's browser.
+   */
+  function linkProduct(
+    ingredientId: string,
+    packSize: number,
+    product: { sku: string; title?: string; url?: unknown; price?: unknown },
+    auto: boolean,
+  ): void {
+    const url = cleanProductUrl(product.url);
+    const price = cleanShelfPrice(product.price);
+    state.productLinks = [
+      ...state.productLinks.filter(
+        (l) => !(l.ingredientId === ingredientId && l.packSize === packSize),
+      ),
+      {
+        ingredientId,
+        packSize,
+        sku: String(product.sku),
+        title: product.title ? String(product.title) : String(product.sku),
+        confirmedOn: state.today,
+        ...(url ? { url } : {}),
+        ...(price ? { price } : {}),
+        ...(auto ? { auto: true } : {}),
+      },
+    ];
+  }
+
   async function handle(path: string, body: any = {}): Promise<ApiResult> {
     switch (path) {
       case "/api/state":
@@ -491,22 +529,27 @@ export function createApp(
 
       /* Search the retailer for one line and rank what comes back. The ranking
          is the domain's job; this only fetches. */
-      case "/api/basket/candidates": {
+      case "/api/basket/candidates":
+      /* "Find all" asks the same question, and puts the answer straight in
+         when it is a 100% match. The browser loops over the lines so it can
+         show progress, but what counts as sure enough is decided here, once,
+         rather than in whichever client happens to be asking. */
+      case "/api/basket/match": {
         if (!basketHooks.provider) return bad(400, NO_BASKET);
         const ingredient = getIngredient(body.ingredientId);
         if (!ingredient) return bad(404, `No ingredient "${body.ingredientId}"`);
+        if (!Number.isFinite(body.packSize)) return bad(400, "packSize required");
         try {
           // Returned alongside the results so the screen can show — and let a
           // person edit — the words that were actually searched for.
           const term = body.term?.trim() || searchTermFor(ingredient);
           const found = await basketHooks.provider.search(term, 12);
+          const candidates = rankCandidates(ingredient, body.packSize, found);
+          const sure = path === "/api/basket/match" ? autoMatch(candidates) : null;
+          if (sure) linkProduct(ingredient.id, body.packSize, sure.product, true);
           return {
             status: 200,
-            body: {
-              candidates: rankCandidates(ingredient, body.packSize, found),
-              confident: CONFIDENT,
-              term,
-            },
+            body: { candidates, confident: CONFIDENT, term, linked: sure?.product ?? null },
           };
         } catch (error) {
           return bad(400, message(error));
@@ -516,16 +559,11 @@ export function createApp(
       /* A person has decided. Remembered per ingredient and pack size, so the
          same choice is never asked for twice. */
       case "/api/basket/link": {
-        const { ingredientId, packSize, sku, title } = body;
+        const { ingredientId, packSize, sku } = body;
         if (!ingredientId || !sku || !Number.isFinite(packSize)) {
           return bad(400, "ingredientId, packSize and sku required");
         }
-        state.productLinks = [
-          ...state.productLinks.filter(
-            (l) => !(l.ingredientId === ingredientId && l.packSize === packSize),
-          ),
-          { ingredientId, packSize, sku, title: title ?? sku, confirmedOn: state.today },
-        ];
+        linkProduct(ingredientId, packSize, body, false);
         return ok();
       }
 

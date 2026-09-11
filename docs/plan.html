@@ -460,8 +460,8 @@
           </tr>
           <tr>
             <td>Grocery prices</td>
-            <td>Not modelled at all</td>
-            <td class="muted">Pack <em>sizes</em> travel between shops well enough to be worth knowing; pack <em>prices</em> do not. A total that is confidently wrong is worse than no total, so the list says what to put in the trolley and stops there. The pack solver now minimises leftovers instead of pounds, which is the objective that survives changing supermarket.</td>
+            <td>Not modelled; shown live when choosing a product</td>
+            <td class="muted">Pack <em>sizes</em> travel between shops well enough to be worth knowing; pack <em>prices</em> do not. A total that is confidently wrong is worse than no total, so the list says what to put in the trolley and stops there. The pack solver now minimises leftovers instead of pounds, which is the objective that survives changing supermarket. The one exception is the local-only Basket panel, which shows Tesco's own shelf price and price per kilo beside each product while you choose between them. It is never added up, never used to choose, and a remembered price is always shown with the date it was seen.</td>
             <td class="muted">The budget guard rail goes with it — eight hard checks rather than nine. Frugality becomes a steer in the prompt rather than a rule in code.</td>
           </tr>
           <tr>
@@ -1127,7 +1127,7 @@
           <tr>
             <td>Grocery price data</td>
             <td><span class="chip settled">Dropped</span></td>
-            <td class="muted">Was the second-worst risk in this register: no supported UK supermarket price API, unofficial endpoints that break without warning. Removing prices from the design removed the risk outright. The list now says what to put in the trolley, not what it will cost.</td>
+            <td class="muted">Was the second-worst risk in this register: no supported UK supermarket price API, unofficial endpoints that break without warning. Removing prices from the design removed the risk outright. The list now says what to put in the trolley, not what it will cost. The local Basket panel does show Tesco's live shelf prices while choosing products, over the same unofficial session that fills the basket. If that breaks, the panel loses a column. Nothing else reads a price.</td>
           </tr>
           <tr>
             <td>Model invents ingredients</td>

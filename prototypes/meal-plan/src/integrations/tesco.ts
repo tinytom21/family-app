@@ -44,6 +44,40 @@ export interface TescoOptions {
   readonly throttleMs?: number;
 }
 
+/**
+ * One basketeer search result, in this app's terms.
+ *
+ * Exported so the mapping can be tested without a Tesco session. Every field is
+ * read defensively: basketeer's own parsers already tolerate Tesco's schema
+ * drifting, and a missing price should cost a column, not the search.
+ */
+export function fromSearchResult(r: any): RetailerProduct {
+  const price = r?.price ?? {};
+  const offer = r?.promotions?.[0]?.description;
+  return {
+    sku: String(r.sku),
+    title: String(r.title ?? ""),
+    // Search results carry no structured pack size, so the scorer reads the
+    // size off the title, which is where Tesco puts it anyway.
+    ...(typeof price.actual === "number"
+      ? {
+          price: {
+            each: price.actual,
+            ...(typeof price.unitPrice === "number" ? { perUnit: price.unitPrice } : {}),
+            ...(typeof price.unitOfMeasure === "string" && price.unitOfMeasure
+              ? { unit: price.unitOfMeasure.toLowerCase() }
+              : {}),
+          },
+        }
+      : {}),
+    ...(typeof offer === "string" && offer ? { offer } : {}),
+    // Anonymous reads report the national answer and a booked slot reports the
+    // store's, so `true` is optimistic — but `false` is worth believing.
+    ...(typeof r.available === "boolean" ? { available: r.available } : {}),
+    url: `https://www.tesco.com/groceries/en-GB/products/${encodeURIComponent(String(r.sku))}`,
+  };
+}
+
 export class TescoBasket implements BasketProvider {
   readonly id = "tesco";
   #client: any = null;
@@ -125,13 +159,7 @@ export class TescoBasket implements BasketProvider {
   async search(term: string, limit = 12): Promise<RetailerProduct[]> {
     const client = await this.#ensureClient();
     const page = await client.search(term, { limit });
-    return (page.results ?? []).map((r: any) => ({
-      sku: r.sku,
-      title: r.title,
-      // Tesco states the size in the title; where a structured pack size is
-      // available it is better, so pass both and let the scorer prefer it.
-      ...(r.packSize ? { size: `${r.packSize.value}${r.packSize.units}` } : {}),
-    }));
+    return (page.results ?? []).map(fromSearchResult);
   }
 
   /** Set the line to this quantity. Idempotent — see the note at the top. */
@@ -143,9 +171,10 @@ export class TescoBasket implements BasketProvider {
   async basket(): Promise<{ sku: string; title: string; quantity: number }[]> {
     const client = await this.#ensureClient();
     const basket = await client.basket.get();
-    return (basket?.lines ?? []).map((line: any) => ({
+    // Basket lines carry a SKU and a quantity but no title, so the SKU stands in.
+    return (basket?.items ?? []).map((line: any) => ({
       sku: line.sku ?? line.id,
-      title: line.title ?? "",
+      title: line.sku ?? line.id,
       quantity: line.quantity ?? 0,
     }));
   }

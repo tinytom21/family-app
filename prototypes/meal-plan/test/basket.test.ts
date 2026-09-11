@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   CONFIDENT,
+  autoMatch,
+  cleanProductUrl,
+  cleanShelfPrice,
   parseSize,
   planBasket,
   rankCandidates,
@@ -106,6 +109,20 @@ test("nothing plausible means nothing is confident", () => {
   );
 });
 
+test("equal matches keep the retailer's order", () => {
+  // Tesco's ranking knows what people buy. Alphabetical order did not, and
+  // would have put Aberdeen Angus ahead of the own brand every single week.
+  const mince = requireIngredient("beef-mince");
+  const ranked = rankCandidates(mince, 500, [
+    product("Tesco Lean Beef Mince 5% Fat 500g", "listed-first"),
+    product("Aberdeen Angus Beef Mince 5% Fat 500g", "alphabetically-first"),
+  ]);
+  assert.deepEqual(
+    ranked.map((r) => r.product.sku),
+    ["listed-first", "alphabetically-first"],
+  );
+});
+
 /* ---------------- turning a list into a basket ---------------- */
 
 const line = (
@@ -144,8 +161,10 @@ test("confirmed products become basket quantities from the pack solver", () => {
       title: "A tomato-tinned",
       quantity: 4,
       ingredientId: "tomato-tinned",
+      name: "Chopped tomatoes",
       packSize: 400,
       packLabel: "400 g tin",
+      chosenOn: "2026-09-08",
     },
   ]);
   assert.deepEqual(plan.needsChoosing, []);
@@ -202,6 +221,29 @@ test("a week of confirmed links produces a complete basket", () => {
   assert.equal(plan.items.reduce((n, i) => n + i.quantity, 0), 5);
 });
 
+test("what was seen when choosing travels with the basket item", () => {
+  // The link to check and the price as it was that day, so the screen can show
+  // both without searching again — and can date the price instead of passing
+  // off last month's as today's.
+  const plan = planBasket(
+    [line("beef-mince", "Beef mince, 5% fat", [{ size: 500, label: "500 g pack", count: 1 }])],
+    [
+      {
+        ...link("beef-mince", 500, "m"),
+        url: "https://www.tesco.com/groceries/en-GB/products/1",
+        price: { each: 3.5, perUnit: 7, unit: "kg" },
+        auto: true,
+      },
+    ],
+  );
+  const [item] = plan.items;
+  assert.equal(item.url, "https://www.tesco.com/groceries/en-GB/products/1");
+  assert.deepEqual(item.price, { each: 3.5, perUnit: 7, unit: "kg" });
+  assert.equal(item.auto, true);
+  assert.equal(item.chosenOn, "2026-09-08");
+  assert.equal(item.name, "Beef mince, 5% fat");
+});
+
 test("a specification like 5% fat separates two otherwise identical products", () => {
   // Real Tesco results. Scored on the search term alone these tie, because the
   // search term drops everything after the comma — so the wrong fat content
@@ -252,4 +294,92 @@ test("when the right size is not in the results, nothing is ticked", () => {
     product("Tesco Lean Beef Mince 5% Fat 250g"),
   ]);
   assert.equal(ranked.some((r) => r.preselect), false);
+});
+
+/* ---------------- 100% matches, which nobody checks ---------------- */
+
+test("a 100% match is every word, the exact size, and for sale", () => {
+  const mince = requireIngredient("beef-mince");
+  const exact = scoreMatch(mince, 500, product("Tesco Lean Beef Mince 5% Fat 500g"));
+  assert.equal(exact.score, 1);
+  assert.equal(exact.perfect, true);
+});
+
+test("a close or unstated size is worth a tick, not a purchase nobody looked at", () => {
+  const mince = requireIngredient("beef-mince");
+
+  const close = scoreMatch(mince, 500, product("Tesco Beef Mince 5% Fat 454g"));
+  assert.equal(close.preselect, true);
+  assert.equal(close.perfect, false);
+
+  const unstated = scoreMatch(mince, 500, product("Tesco Beef Mince 5% Fat"));
+  assert.equal(unstated.preselect, true);
+  assert.equal(unstated.perfect, false);
+});
+
+test("something out of stock is never ticked, however well it matches", () => {
+  const mince = requireIngredient("beef-mince");
+  const gone = scoreMatch(mince, 500, {
+    ...product("Tesco Beef Mince 5% Fat 500g"),
+    available: false,
+  });
+  assert.equal(gone.score, 1, "still the right product, and the score still says so");
+  assert.equal(gone.preselect, false);
+  assert.equal(gone.perfect, false);
+  assert.match(gone.why, /not available/);
+});
+
+test("Find all takes the top result only when it is a 100% match", () => {
+  const mince = requireIngredient("beef-mince");
+
+  const sure = autoMatch(
+    rankCandidates(mince, 500, [
+      product("Tesco Beef Mince 20% Fat 500g", "wrong-spec"),
+      product("Tesco Beef Mince 5% Fat 500g", "right"),
+    ]),
+  );
+  assert.equal(sure?.product.sku, "right");
+
+  const unsure = autoMatch(
+    rankCandidates(mince, 500, [
+      product("Tesco Beef Mince 5% Fat 454g", "close"),
+      product("Tesco Beef Mince 5% Fat 1kg", "big"),
+    ]),
+  );
+  assert.equal(unsure, null);
+});
+
+test("when the usual is out of stock, the substitute is left to a person", () => {
+  // The Finest mince is a 100% match on its own. Choosing it here would
+  // remember a one-week stock-out as the family's usual, at a higher price.
+  const mince = requireIngredient("beef-mince");
+  const ranked = rankCandidates(mince, 500, [
+    { ...product("Tesco Beef Mince 5% Fat 500g", "usual"), available: false },
+    product("Tesco Finest Beef Mince 5% Fat 500g", "dearer"),
+  ]);
+  assert.equal(ranked[1].perfect, true);
+  assert.equal(autoMatch(ranked), null);
+});
+
+/* ---------------- what is kept from outside ---------------- */
+
+test("only https product links are kept, because household state is shared", () => {
+  const page = "https://www.tesco.com/groceries/en-GB/products/254656543";
+  assert.equal(cleanProductUrl(page), page);
+  assert.equal(cleanProductUrl("javascript:alert(document.cookie)"), undefined);
+  assert.equal(cleanProductUrl("http://www.tesco.com/"), undefined);
+  assert.equal(cleanProductUrl("not a link"), undefined);
+  assert.equal(cleanProductUrl(42), undefined);
+});
+
+test("a price is kept only if it is a price", () => {
+  assert.deepEqual(cleanShelfPrice({ each: 3.5, perUnit: 7, unit: "kg" }), {
+    each: 3.5,
+    perUnit: 7,
+    unit: "kg",
+  });
+  assert.deepEqual(cleanShelfPrice({ each: 3.5, perUnit: "7" }), { each: 3.5 });
+  assert.equal(cleanShelfPrice({ each: -1 }), undefined);
+  assert.equal(cleanShelfPrice({ each: Number.NaN }), undefined);
+  assert.equal(cleanShelfPrice("£3.50"), undefined);
 });
