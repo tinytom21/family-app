@@ -100,10 +100,27 @@ alter table public.household_invites enable row level security;
 alter table public.household_state   enable row level security;
 
 -- households -----------------------------------------------------------------
+-- Members can read their household, and so can whoever created it.
+--
+-- The owner clause is not a convenience. Creating a household is three steps —
+-- insert the household, add yourself to it, save the week — and until step two
+-- lands there is no membership row, so a membership-only rule locks the
+-- founder out of their own first household in two separate ways:
+--
+--   * `insert ... returning` re-reads the new row through the SELECT policy,
+--     which fails and is reported as "new row violates row-level security
+--     policy for table households" — an INSERT error for a SELECT problem, and
+--     a full afternoon to see through.
+--   * the members_insert_self policy below asks whether you own the household,
+--     and that subquery reads this table under *this* policy. No membership
+--     row, no read, no membership row.
+--
+-- It is also just true: a household you own and are somehow not a member of is
+-- exactly the wreckage you need to be able to see in order to fix it.
 drop policy if exists households_select on public.households;
 create policy households_select on public.households
   for select to authenticated
-  using (public.is_household_member(id));
+  using (owner_user_id = auth.uid() or public.is_household_member(id));
 
 drop policy if exists households_insert on public.households;
 create policy households_insert on public.households

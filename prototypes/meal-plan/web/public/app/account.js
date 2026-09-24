@@ -124,26 +124,37 @@ export async function createHousehold(name, snapshot) {
   const user = await currentUser();
   if (!supabase || !user) throw new Error("Sign in first.");
 
-  const { data: household, error: e1 } = await supabase
+  const { data: household, error: created } = await supabase
     .from("households")
     .insert({ name, owner_user_id: user.id })
     .select()
     .single();
-  if (e1) throw new Error(e1.message);
+  if (created) throw new Error(`Creating the household — ${created.message}`);
 
-  const { error: e2 } = await supabase
-    .from("household_members")
-    .insert({
-      household_id: household.id,
-      user_id: user.id,
-      email: user.email,
-    });
-  if (e2) throw new Error(e2.message);
+  /* All three steps can fail, and Row Level Security reports all three in
+     almost the same words, so each one says which it was: "new row violates
+     row-level security policy" is an afternoon when you do not know whether it
+     came from the household, the membership or the week.
+     If a later step fails, the empty household goes with it. Left behind, it
+     would be invisible to the retry and the next attempt would make another. */
+  try {
+    const { error: joined } = await supabase
+      .from("household_members")
+      .insert({
+        household_id: household.id,
+        user_id: user.id,
+        email: user.email,
+      });
+    if (joined) throw new Error(`Adding you to the household — ${joined.message}`);
 
-  // The revision comes back with it, so the sync knows what it is building on
-  // and the very first change does not look like somebody else's.
-  const saved = await saveState(household.id, snapshot, null);
-  return { ...household, revision: saved?.revision ?? null };
+    // The revision comes back with it, so the sync knows what it is building on
+    // and the very first change does not look like somebody else's.
+    const saved = await saveState(household.id, snapshot, null);
+    return { ...household, revision: saved?.revision ?? null };
+  } catch (error) {
+    await supabase.from("households").delete().eq("id", household.id);
+    throw error;
+  }
 }
 
 export async function joinHousehold(code) {
