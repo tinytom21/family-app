@@ -9,11 +9,14 @@
  *
  * Two honest consequences of having no server:
  *
- *   1. No model. Calling Claude or Gemini needs an API key, and a key shipped
- *      to a browser is a key given away — anyone can read it out of the
- *      bundle and spend it. So the AI hooks are absent, the two AI buttons
- *      disable themselves, and this file imports no SDK at all. That is a
- *      property of the build, not a promise in a comment.
+ *   1. No key, and therefore no SDK. Calling Claude needs an API key, and a key
+ *      shipped to a browser is a key given away — anyone can read it out of
+ *      the bundle and spend it. So the key sits in a function on Supabase and
+ *      this file asks that, through `EdgeProvider`, with the caller's own
+ *      session. The planner, the prompt and the repair loop are the same
+ *      modules the server uses; only the last hop differs. Nothing here
+ *      imports a model SDK, and the build refuses to publish if anything
+ *      key-shaped appears in the output.
  *
  *   2. No database. State lives in localStorage, which means the demo is
  *      per-browser and survives a refresh but not a different device. Good
@@ -22,7 +25,8 @@
  */
 
 import { createApp } from "../../src/app-state.ts";
-import type { Snapshot } from "../../src/app-state.ts";
+import type { AiHooks, Snapshot } from "../../src/app-state.ts";
+import { EdgeProvider } from "./edge-provider.ts";
 
 const STORAGE_KEY = "family-app.demo-state.v1";
 
@@ -37,7 +41,49 @@ function loadSnapshot(): Partial<Snapshot> | undefined {
   }
 }
 
-const app = createApp({ seed: loadSnapshot() });
+/**
+ * The model, when there is somebody signed in to spend it on.
+ *
+ * `available` is a getter rather than a value because it changes during the
+ * visit: the buttons are dead on arrival, and come alive the moment you sign
+ * in and the household is in your account. Read on every render, so nothing
+ * has to remember to refresh it.
+ */
+const ai: AiHooks = {
+  get available(): boolean {
+    return Boolean(window.__familyModel?.ready());
+  },
+
+  async generatePlan(constraints, options) {
+    const { generatePlan } = await import("../../src/ai/planner.ts");
+    const run = await generatePlan(constraints, {
+      provider: new EdgeProvider(),
+      slots: options.slots,
+      larderLines: options.larderLines,
+    });
+    return {
+      plan: run.plan,
+      provider: run.provider,
+      model: run.model,
+      attempts: run.attempts,
+      costUsd: run.costUsd,
+    };
+  },
+
+  async captureTasks(text, context) {
+    const { captureTasks } = await import("../../src/ai/capture.ts");
+    const run = await captureTasks(text, context, { provider: new EdgeProvider() });
+    return {
+      tasks: run.tasks,
+      note: run.note,
+      provider: run.provider,
+      model: run.model,
+      costUsd: run.costUsd,
+    };
+  },
+};
+
+const app = createApp({ seed: loadSnapshot(), ai });
 
 function save(): void {
   try {

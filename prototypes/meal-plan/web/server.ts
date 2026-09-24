@@ -54,7 +54,8 @@ const ai: AiHooks = {
   available: modelProblem === null,
 
   async generatePlan(constraints, options) {
-    const { generatePlan, selectProvider } = await import("../src/ai/planner.ts");
+    const { generatePlan } = await import("../src/ai/planner.ts");
+    const { selectProvider } = await import("../src/ai/providers.ts");
     const provider = selectProvider();
     // A bare 401 from an SDK says nothing about which provider it came from,
     // which matters most when two keys are set and the wrong one won.

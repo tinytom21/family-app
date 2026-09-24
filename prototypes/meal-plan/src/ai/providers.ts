@@ -12,78 +12,36 @@
  * never learn which model answered.
  */
 
-import { toAnthropicDialect, toGeminiDialect } from "./dialect.ts";
+import { toGeminiDialect } from "./dialect.ts";
 import { withRetry } from "./retry.ts";
 
-type Json = Record<string, unknown>;
+/* The interface and its types live in `provider.ts`, which imports nothing at
+   all. This file is where the SDKs are, and everything that imports it gets
+   them — which is precisely what the hosted build must not do. They are
+   re-exported here so that every existing caller carries on unchanged. */
+import type {
+  GenerateRequest,
+  GenerateResult,
+  Json,
+  PlanProvider,
+  Turn,
+  Usage,
+} from "./provider.ts";
+import { addUsage, emptyUsage } from "./provider.ts";
+import {
+  ANTHROPIC_BETAS,
+  DEFAULT_MODEL,
+  anthropicBody,
+  claudeCostUsd,
+  readAnthropicMessage,
+} from "./anthropic-wire.ts";
 
-export interface Turn {
-  readonly role: "user" | "assistant";
-  readonly text: string;
-}
-
-export interface GenerateRequest {
-  readonly system: string;
-  /** Full history, oldest first. Always ends with a user turn. */
-  readonly turns: readonly Turn[];
-  readonly schema: Json;
-}
-
-/**
- * Token counts normalised across providers. `inputTokens` always means
- * full-price uncached input — the two SDKs disagree about whether cached
- * tokens are included in their input total, so that is reconciled here rather
- * than left for the cost function to guess at.
- */
-export interface Usage {
-  inputTokens: number;
-  cachedReadTokens: number;
-  cacheWriteTokens: number;
-  outputTokens: number;
-  thoughtTokens: number;
-}
-
-export interface GenerateResult {
-  readonly text: string;
-  readonly usage: Usage;
-}
-
-export interface PlanProvider {
-  readonly id: "claude" | "gemini";
-  readonly model: string;
-  /** Cost in US dollars for the given usage. */
-  costUsd(usage: Usage): number;
-  generate(request: GenerateRequest): Promise<GenerateResult>;
-}
-
-export function emptyUsage(): Usage {
-  return {
-    inputTokens: 0,
-    cachedReadTokens: 0,
-    cacheWriteTokens: 0,
-    outputTokens: 0,
-    thoughtTokens: 0,
-  };
-}
-
-export function addUsage(total: Usage, delta: Usage): void {
-  total.inputTokens += delta.inputTokens;
-  total.cachedReadTokens += delta.cachedReadTokens;
-  total.cacheWriteTokens += delta.cacheWriteTokens;
-  total.outputTokens += delta.outputTokens;
-  total.thoughtTokens += delta.thoughtTokens;
-}
+export { addUsage, emptyUsage };
+export type { GenerateRequest, GenerateResult, PlanProvider, Turn, Usage };
 
 /* ------------------------------------------------------------------ */
 /* Claude                                                              */
 /* ------------------------------------------------------------------ */
-
-const CLAUDE_USD_PER_MTOK = {
-  input: 5.0,
-  output: 25.0,
-  cacheReadMultiplier: 0.1,
-  cacheWriteMultiplier: 1.25,
-};
 
 export class ClaudeProvider implements PlanProvider {
   readonly id = "claude" as const;
@@ -91,7 +49,7 @@ export class ClaudeProvider implements PlanProvider {
   #client: any;
 
   constructor(
-    model = process.env.CLAUDE_MODEL ?? "claude-opus-5",
+    model = process.env.CLAUDE_MODEL ?? DEFAULT_MODEL,
     client?: unknown,
   ) {
     this.model = model;
@@ -107,85 +65,31 @@ export class ClaudeProvider implements PlanProvider {
   }
 
   costUsd(u: Usage): number {
-    const m = 1_000_000;
-    return (
-      (u.inputTokens / m) * CLAUDE_USD_PER_MTOK.input +
-      (u.outputTokens / m) * CLAUDE_USD_PER_MTOK.output +
-      (u.cachedReadTokens / m) *
-        CLAUDE_USD_PER_MTOK.input *
-        CLAUDE_USD_PER_MTOK.cacheReadMultiplier +
-      (u.cacheWriteTokens / m) *
-        CLAUDE_USD_PER_MTOK.input *
-        CLAUDE_USD_PER_MTOK.cacheWriteMultiplier
-    );
+    return claudeCostUsd(u);
   }
 
   async generate(request: GenerateRequest): Promise<GenerateResult> {
     const client = await this.#ensureClient();
 
-    // Claude has no server-side conversation state, so repair turns resend the
-    // history. The cached system prefix is what keeps that affordable.
     const message = await withRetry(() => this.#once(client, request), {
       onRetry: ({ attempt, waitMs }) =>
         console.log(
           `  ${this.model} is busy; retrying in ${(waitMs / 1000).toFixed(1)}s (attempt ${attempt + 1})`,
         ),
     });
-    return this.#toResult(message);
+    return readAnthropicMessage(message);
   }
 
+  /* The request itself is built in `anthropic-wire.ts`, because the hosted
+     build sends the identical thing over plain HTTP to a function that holds
+     the key. Two copies of it would drift, and the symptom would be a better
+     plan on one machine than the other with nowhere obvious to look. */
   async #once(client: any, request: GenerateRequest): Promise<any> {
     const stream = client.beta.messages.stream({
-      model: this.model,
-      max_tokens: 32000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "high",
-        format: {
-          type: "json_schema",
-          schema: toAnthropicDialect(request.schema),
-        },
-      },
-      system: [
-        {
-          type: "text",
-          text: request.system,
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      messages: request.turns.map((t) => ({ role: t.role, content: t.text })),
+      ...anthropicBody(request, this.model),
+      betas: ANTHROPIC_BETAS,
     });
-
     return await stream.finalMessage();
-  }
-
-  #toResult(message: any): GenerateResult {
-    if (message.stop_reason === "refusal") {
-      throw new Error(
-        `Claude declined the request (${message.stop_details?.category ?? "unknown"}).`,
-      );
-    }
-    if (message.stop_reason === "max_tokens") {
-      throw new Error(
-        "Hit max_tokens before the plan was complete — raise max_tokens or plan fewer days.",
-      );
-    }
-
-    const block = message.content.find((b: any) => b.type === "text");
-    if (!block) throw new Error("No text block in the Claude response.");
-
-    return {
-      text: block.text,
-      usage: {
-        inputTokens: message.usage.input_tokens ?? 0,
-        cachedReadTokens: message.usage.cache_read_input_tokens ?? 0,
-        cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
-        outputTokens: message.usage.output_tokens ?? 0,
-        thoughtTokens: 0,
-      },
-    };
   }
 }
 

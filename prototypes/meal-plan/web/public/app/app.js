@@ -1828,6 +1828,9 @@ async function boot() {
      somebody to type it in a second time is the bug this prevents. */
   sync = await import("./sync.js");
   sync.attach({ api: host, onState: render, onStatus: showSync });
+  // Puts window.__familyModel in place, which is how the published build
+  // reaches Claude without a key: through the function on Supabase.
+  await import("./model.js");
   const fromAccount = await sync.open(state).catch((error) => {
     setStatus(`Could not reach your account: ${error.message}`, true);
     return null;

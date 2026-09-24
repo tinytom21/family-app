@@ -9,9 +9,11 @@ so it works on a laptop the day it exists.
 
 The hosted site runs the real domain code in your browser — the same modules
 the server calls. Your week lives in that browser, and signing in keeps it in
-your account as well, so the same family turns up on a phone. The two AI
-buttons are disabled there, because an API key shipped to a web page is an API
-key given away. Clone and set a key to see that half.
+your account as well, so the same family turns up on a phone. It never holds an
+API key, because a key shipped to a web page is a key given away; the two AI
+buttons work there by asking a Supabase function that holds one, and stay dead
+until that function is deployed and you are signed in. Filling a Tesco basket
+stays on your own machine, where the supermarket session belongs.
 
 ## Where things are
 
@@ -133,6 +135,45 @@ Gemini's free tier allows **twenty requests a day**, which is under three
 clicks of Replan once repair rounds are counted. It is enough to see the thing
 work and not enough to use, which is worth knowing before concluding the app is
 broken.
+
+### Planning from a phone
+
+A static host cannot hold an API key: anyone who opens the page can read it and
+spend it. So the key goes in a Supabase Edge Function —
+[`supabase/functions/plan`](supabase/functions/plan/index.ts) — and the
+published app asks that instead of an SDK.
+
+It is a carrier, not a second model API. The prompt, the schema, the repair
+loop and the validation stay in the app, where they are tested; both hosts
+build the request from the same module (`src/ai/anthropic-wire.ts`), so the
+laptop and the phone ask Claude for exactly the same thing. What the function
+adds is three refusals: it checks in the database, under your own token, that
+you are in the household you claim; it claims a call against a daily allowance
+before spending anything; and it allow-lists the model and the answer length
+rather than trusting the browser for either.
+
+To switch it on, once:
+
+```bash
+supabase login
+supabase link --project-ref your-project-ref
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-your-real-key
+supabase functions deploy plan
+```
+
+Then run the newer half of [`supabase/schema.sql`](supabase/schema.sql) — the
+`model_usage` table and the two functions beneath it — in the SQL editor. The
+whole file is re-runnable, so pasting all of it is fine.
+
+`PLAN_DAILY_CALLS` sets the allowance (default 20 a day per household, and the
+database refuses to be talked above 100 whatever the function asks for).
+`PLAN_MODEL` pins a cheaper model for the hosted path alone. `PLAN_ALLOWED_ORIGINS`
+is the CORS list, and already covers the published site and `localhost:4321`.
+
+The two AI buttons come alive on the hosted site once you are signed in *and*
+the household is in your account — the allowance belongs to a household, so
+there has to be one. The local server ignores all of this and keeps using the
+key in its own environment.
 
 The order that gets you a usable week:
 

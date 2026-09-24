@@ -17,14 +17,16 @@ import { planResponseSchema } from "./schema.ts";
 import { validatePlan, isWeekend } from "../validate.ts";
 import type { ValidationResult, Violation } from "../validate.ts";
 import type { MealPlan, PlanConstraints } from "../domain/types.ts";
+/* From `provider.ts`, not `providers.ts`: the interface, not the SDKs. This
+   module is bundled into the hosted build, which is allowed to contain no
+   model SDK and no key at all, so the caller brings the provider. */
 import {
   addUsage,
   emptyUsage,
-  selectProvider,
   type PlanProvider,
   type Turn,
   type Usage,
-} from "./providers.ts";
+} from "./provider.ts";
 
 export interface PlanRun {
   readonly plan: MealPlan;
@@ -216,14 +218,15 @@ export function slotsForWeek(
 export async function generatePlan(
   constraints: PlanConstraints,
   options: {
-    provider?: PlanProvider;
+    provider: PlanProvider;
     slots?: readonly { date: string; slot: string }[];
     larderLines?: readonly string[];
     maxRepairs?: number;
     onProgress?: (message: string) => void;
-  } = {},
+  },
 ): Promise<PlanRun> {
-  const provider = options.provider ?? selectProvider();
+  const provider = options.provider;
+  if (!provider) throw new Error("generatePlan needs a provider to ask.");
   const slots = options.slots ?? slotsForWeek(constraints.weekStarting);
   const maxRepairs = options.maxRepairs ?? 2;
   const log = options.onProgress ?? (() => {});
@@ -310,5 +313,5 @@ function finish(
   };
 }
 
-export { isWeekend, selectProvider };
+export { isWeekend };
 export type { Usage, PlanProvider };

@@ -23,13 +23,13 @@ import {
   type RecurrenceUnit,
   type TaskCategory,
 } from "../domain/tasks.ts";
+/* The interface, not the SDKs — see the same note in planner.ts. */
 import {
   addUsage,
   emptyUsage,
-  selectProvider,
   type PlanProvider,
   type Usage,
-} from "./providers.ts";
+} from "./provider.ts";
 
 const CATEGORIES: TaskCategory[] = [
   "household",
@@ -288,9 +288,10 @@ function nextMatchingWeekday(today: string, wanted: Set<number>): string {
 export async function captureTasks(
   text: string,
   context: CaptureContext,
-  options: { provider?: PlanProvider } = {},
+  options: { provider: PlanProvider },
 ): Promise<CaptureRun> {
-  const provider = options.provider ?? selectProvider();
+  const provider = options.provider;
+  if (!provider) throw new Error("captureTasks needs a provider to ask.");
   const usage = emptyUsage();
 
   const result = await provider.generate({

@@ -106,9 +106,8 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const { generatePlan, slotsForWeek, selectProvider } = await import(
-      "./ai/planner.ts"
-    );
+    const { generatePlan, slotsForWeek } = await import("./ai/planner.ts");
+    const { selectProvider } = await import("./ai/providers.ts");
     const { projectLarder, larderForPrompt } = await import(
       "./domain/larder.ts"
     );

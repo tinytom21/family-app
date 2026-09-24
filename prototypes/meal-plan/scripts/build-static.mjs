@@ -39,6 +39,7 @@ for (const file of [
   "app/setup.js",
   "app/account.js",
   "app/sync.js",
+  "app/model.js",
   "check-google.js",
   "check-logic.js",
 ]) {

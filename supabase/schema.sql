@@ -335,3 +335,113 @@ end;
 $$;
 
 grant execute on function public.save_household_state(uuid, jsonb, bigint) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Asking the model, from a device that has no key
+-- ---------------------------------------------------------------------------
+
+-- The published app runs on a static host, so it cannot hold an API key. The
+-- `plan` edge function holds one instead, and these two functions are what
+-- stop that being an open tap: a call is claimed before it is made, against a
+-- daily allowance per household, and the tokens are recorded after.
+--
+-- The allowance is per household rather than per person on purpose. It is one
+-- family's bill, and "whose turn it was to press the button" is not a limit
+-- anybody would thank you for.
+create table if not exists public.model_usage (
+  household_id  uuid not null references public.households (id) on delete cascade,
+  day           date not null,
+  calls         integer not null default 0,
+  input_tokens  bigint not null default 0,
+  output_tokens bigint not null default 0,
+  primary key (household_id, day)
+);
+
+alter table public.model_usage enable row level security;
+
+-- Readable by the household, so the app can say how much of today is left.
+-- Deliberately no insert or update policy: the only way this table changes is
+-- through the two definer functions below, which count honestly.
+drop policy if exists usage_select on public.model_usage;
+create policy usage_select on public.model_usage
+  for select to authenticated
+  using (public.is_household_member(household_id));
+
+-- Claim one call, or say why not. Counted before the request goes out, because
+-- a crash between asking and counting should cost the allowance, not the money.
+create or replace function public.claim_model_call(
+  target uuid,
+  daily_cap integer default 20
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  today date := (now() at time zone 'utc')::date;
+  used  integer;
+  cap   integer;
+begin
+  if auth.uid() is null then
+    return jsonb_build_object('ok', false, 'problem', 'not-signed-in');
+  end if;
+  if not public.is_household_member(target) then
+    return jsonb_build_object('ok', false, 'problem', 'not-your-household');
+  end if;
+
+  -- The caller asks for a cap and the database decides what it is allowed to
+  -- be. Anyone signed in can call this function directly, so a limit that
+  -- trusted its own argument would not be a limit.
+  cap := least(greatest(coalesce(daily_cap, 20), 1), 100);
+
+  insert into public.model_usage (household_id, day)
+  values (target, today)
+  on conflict (household_id, day) do nothing;
+
+  select calls into used
+    from public.model_usage
+   where household_id = target and day = today
+   for update;
+
+  if used >= cap then
+    return jsonb_build_object(
+      'ok', false, 'problem', 'daily-cap', 'calls_today', used, 'cap', cap
+    );
+  end if;
+
+  update public.model_usage
+     set calls = calls + 1
+   where household_id = target and day = today;
+
+  return jsonb_build_object('ok', true, 'calls_today', used + 1, 'cap', cap);
+end;
+$$;
+
+revoke all on function public.claim_model_call(uuid, integer) from public;
+grant execute on function public.claim_model_call(uuid, integer) to authenticated;
+
+create or replace function public.record_model_usage(
+  target uuid,
+  in_tokens bigint,
+  out_tokens bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if not public.is_household_member(target) then
+    return;
+  end if;
+  update public.model_usage
+     set input_tokens  = input_tokens  + greatest(coalesce(in_tokens, 0), 0),
+         output_tokens = output_tokens + greatest(coalesce(out_tokens, 0), 0)
+   where household_id = target
+     and day = (now() at time zone 'utc')::date;
+end;
+$$;
+
+revoke all on function public.record_model_usage(uuid, bigint, bigint) from public;
+grant execute on function public.record_model_usage(uuid, bigint, bigint) to authenticated;
