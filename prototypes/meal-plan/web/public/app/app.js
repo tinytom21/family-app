@@ -121,6 +121,10 @@ function showSync(state, detail) {
     syncing: ["Checking your account…", ""],
     saving: ["Saving…", "Changes are sent a second after you stop"],
     saved: ["Saved to your account", "Every change is kept automatically"],
+    offline: [
+      "Can't reach your account",
+      "Still saved here. A free Supabase project pauses after a week unused — restore it and this clears",
+    ],
     clash: ["Took the newer copy", "Somebody else saved first — yours is kept in Account"],
     error: [
       `Not saved${detail ? ` — ${detail}` : ""}`,

@@ -859,6 +859,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .sync-chip.sync-saved { color: var(--accent); border-color: var(--accent); }
 .sync-chip.sync-saving, .sync-chip.sync-syncing { color: var(--ink-soft); }
 .sync-chip.sync-clash { color: var(--open); border-color: var(--open); }
+.sync-chip.sync-offline { color: var(--open); border-color: var(--open); }
 .sync-chip.sync-error { color: var(--blocked); border-color: var(--blocked); }
 
 .account-rescue {

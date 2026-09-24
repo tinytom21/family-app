@@ -150,6 +150,30 @@ export function attach(options) {
  * just never been here before, and asking for it again is the whole problem.
  */
 export async function open(state) {
+  try {
+    return await openOrGiveUp(state);
+  } catch (error) {
+    // A project that is paused, asleep or simply unreachable must not stop the
+    // app. Everything still works in this browser and in the file beside the
+    // local server; the chip says which of those is happening rather than
+    // sitting on "Checking your account…" until somebody reloads.
+    trouble(error);
+    return null;
+  }
+}
+
+/**
+ * Free Supabase projects pause themselves after a week of nobody using them,
+ * and a paused project loses its DNS record — so this arrives as a failed
+ * fetch rather than as an HTTP error anybody could read.
+ */
+function trouble(error) {
+  const why = error?.message ?? String(error);
+  const unreachable = /fetch|network|dns|resolve|ENOTFOUND|ERR_NAME/i.test(why);
+  say(unreachable ? "offline" : "error", unreachable ? null : why);
+}
+
+async function openOrGiveUp(state) {
   if (!account.isConfigured()) {
     say("off");
     return null;
@@ -277,7 +301,7 @@ async function push() {
 
     say("error", result?.problem ?? "it would not save");
   } catch (error) {
-    say("error", error.message);
+    trouble(error);
   } finally {
     pushing = false;
     if (pushAgain) {
