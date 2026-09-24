@@ -28,3 +28,9 @@ Thumbs.db
 # public by design, but which project the demo points at is a deployment
 # choice, so it is supplied at build time rather than committed.
 supabase.config.json
+
+# The household itself, as the local server keeps it between restarts. It is
+# the family's own data — names, ages, allergies, calendars — and belongs on
+# the machine that typed it in, not in a public repository.
+.family-state.json
+.family-state.json.*

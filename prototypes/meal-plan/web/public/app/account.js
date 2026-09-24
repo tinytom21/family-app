@@ -140,8 +140,10 @@ export async function createHousehold(name, snapshot) {
     });
   if (e2) throw new Error(e2.message);
 
-  await saveState(household.id, snapshot, null);
-  return household;
+  // The revision comes back with it, so the sync knows what it is building on
+  // and the very first change does not look like somebody else's.
+  const saved = await saveState(household.id, snapshot, null);
+  return { ...household, revision: saved?.revision ?? null };
 }
 
 export async function joinHousehold(code) {

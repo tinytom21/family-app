@@ -34,7 +34,14 @@ const out = join(docs, "app");
  * whole page down while every other check stays green, which is exactly how
  * one reached the published site once. Cheap to check, embarrassing to miss.
  */
-for (const file of ["app/app.js", "app/setup.js", "app/account.js", "check-google.js", "check-logic.js"]) {
+for (const file of [
+  "app/app.js",
+  "app/setup.js",
+  "app/account.js",
+  "app/sync.js",
+  "check-google.js",
+  "check-logic.js",
+]) {
   const source = join(root, "web/public", file);
   try {
     execFileSync(process.execPath, ["--check", source], { stdio: "pipe" });

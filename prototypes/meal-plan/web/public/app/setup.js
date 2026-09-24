@@ -35,7 +35,7 @@ const BRACKETS = [
  * rather just look round the example family first.
  */
 export function runSetup(root, options = {}) {
-  const { validate, allowExample = true } = options;
+  const { validate, allowExample = true, signIn = null } = options;
 
   return new Promise((resolve) => {
     let step = 0;
@@ -95,6 +95,16 @@ export function runSetup(root, options = {}) {
         skip.title = "Look round with made-up data; you can set yours up later";
         skip.addEventListener("click", () => resolve(null));
         bar.append(skip);
+      }
+
+      // Somebody who has done this before, on another device, should not be
+      // made to do it again here.
+      if (step === 0 && signIn) {
+        const known = el("button", "btn btn-quiet", "I already have an account");
+        known.type = "button";
+        known.title = "Sign in and bring your family over from another device";
+        known.addEventListener("click", () => signIn());
+        bar.append(known);
       }
       return bar;
     }

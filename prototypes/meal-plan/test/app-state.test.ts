@@ -99,3 +99,20 @@ test("setUp is false until somebody has been through the intro screen", async ()
   await app.handle("/api/household/example", {});
   assert.equal(((await app.handle("/api/state")).body as any).setUp, true);
 });
+
+test("the household remembers which account it belongs to", async () => {
+  // Without this the link lived in a variable, so a page reload forgot where
+  // the household had been uploaded — and the next save made a second one.
+  const app = createApp({ today: "2026-09-03" });
+  await app.handle("/api/household/create", DRAFT);
+
+  const linked = await app.handle("/api/household/link", { remoteId: "abc-123" });
+  assert.equal(linked.status, 200);
+  assert.equal(linked.body.household.remoteId, "abc-123");
+
+  const snapshot = (await app.handle("/api/snapshot", {})).body;
+  assert.equal(snapshot.household.remoteId, "abc-123", "and it survives being saved");
+
+  const empty = await app.handle("/api/household/link", { remoteId: "  " });
+  assert.equal(empty.status, 400);
+});

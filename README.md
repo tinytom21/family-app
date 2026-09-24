@@ -7,10 +7,11 @@ so it works on a laptop the day it exists.
 **[Try it](https://tinytom21.github.io/family-app/app/)** ·
 **[The build plan](https://tinytom21.github.io/family-app/plan.html)**
 
-The hosted demo runs the real domain code in your browser — the same modules
-the server calls — with state in `localStorage` and no back end at all. The two
-AI buttons are disabled there, because an API key shipped to a web page is an
-API key given away. Clone and set a key to see that half.
+The hosted site runs the real domain code in your browser — the same modules
+the server calls. Your week lives in that browser, and signing in keeps it in
+your account as well, so the same family turns up on a phone. The two AI
+buttons are disabled there, because an API key shipped to a web page is an API
+key given away. Clone and set a key to see that half.
 
 ## Where things are
 
@@ -49,6 +50,11 @@ These say `node` rather than `npm run` on purpose. Windows blocks `npm.ps1`
 under the default execution policy, so `npm` fails in PowerShell with a security
 error that has nothing to do with this project. `node` sidesteps it entirely;
 `npm.cmd run web` also works if you prefer npm.
+
+The local server keeps the household in `prototypes/meal-plan/.family-state.json`,
+written after every change and read back at startup, so closing the terminal
+costs nothing. It is the family's own data and is gitignored; `FAMILY_STATE_FILE`
+moves it somewhere else.
 
 Paste a real key, not the placeholder. `$env:ANTHROPIC_API_KEY = "sk-ant-..."`
 sets the variable to the literal string `sk-ant-...`, and the assignment
@@ -167,11 +173,32 @@ are deliberately different things — a seven-year-old doesn't need an account t
 be allergic to peanuts, and requiring one is a good way to make sure the
 allergy never gets recorded.
 
+**Nothing is typed in twice.** The family is entered once and then kept in
+three places that agree with each other: the browser you're using, a file
+beside the local server (`.family-state.json`, written after every change), and
+— once you sign in — your account. After signing in there is no save button:
+every change goes up a second after you stop making it, and the top bar says
+*Saved to your account* when it has. Open the site on a phone, sign in, and the
+family is already there; the intro screen offers *I already have an account*
+for exactly that.
+
+Two people editing at once is the normal case, so it's handled rather than
+prevented. On opening, the account's copy wins — a laptop that's been shut for
+a week doesn't get to undo the week. A change that loses a race isn't thrown
+away either: the database refuses a save built on a stale revision, so the
+losing copy is kept in that browser and offered back from the Account panel.
+Last-write-wins that nobody can see is how a Sunday evening disappears.
+
 To switch accounts on you need a Supabase project: run
 [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor, then set
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` (repository secrets for the published
-build, or a `supabase.config.json` locally). Without them the app says accounts
-are off and keeps working in the browser. The anon key is public by design —
+build, or a `supabase.config.json` at the top of this repo for local runs —
+the local server serves the same details to the page, so signing in on
+`localhost` reaches the same household as signing in on the real site instead
+of quietly starting a second one). Without them the app says accounts are off
+and keeps working in the browser. Both origins have to be on Supabase's
+**Redirect URLs** list, which is why the runbook adds `http://localhost:4321/**`
+as well as the published one. The anon key is public by design —
 it names the project, not the person — so Row Level Security is what actually
 protects a family's week, and the build refuses any key whose role isn't
 `anon`.

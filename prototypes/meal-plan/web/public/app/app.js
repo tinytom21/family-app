@@ -34,7 +34,7 @@ let busy = false;
  * `window.__familyApi`. Both run identical domain code — this seam is the only
  * thing that differs between the two, and it is deliberately three lines long.
  */
-const api = window.__familyApi ?? {
+const host = window.__familyApi ?? {
   get: () => fetch("/api/state").then((r) => r.json()),
   post: async (path, body) => {
     const res = await fetch(path, {
@@ -44,6 +44,40 @@ const api = window.__familyApi ?? {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+    return data;
+  },
+};
+
+/** Loaded on boot; null until then, and null forever in a build without accounts. */
+let sync = null;
+
+/**
+ * Reading the state, asking the shop a question or minting an invite code
+ * changes nothing worth keeping. Everything else changes the household, and
+ * the copy in the account should follow within a second or two.
+ */
+const READS_ONLY = new Set([
+  "/api/state",
+  "/api/snapshot",
+  "/api/household/validate",
+  "/api/invite/new",
+  "/api/invite/check",
+  "/api/invite/message",
+  "/api/basket/plan",
+  "/api/basket/candidates",
+  "/api/basket/fill",
+  "/api/basket/checkout",
+  "/api/basket/signin",
+]);
+
+/* Everything the screen does goes through here, which makes it the one place
+   that knows a change has happened — and so the one place that has to
+   remember to keep the account up to date. */
+const api = {
+  get: () => host.get(),
+  async post(path, body) {
+    const data = await host.post(path, body);
+    if (!READS_ONLY.has(path)) sync?.touch();
     return data;
   },
 };
@@ -70,6 +104,34 @@ function setStatus(message, isError = false) {
   const node = $("status");
   node.textContent = message;
   node.classList.toggle("error", isError);
+}
+
+/**
+ * One word about where this family is being kept.
+ *
+ * Small, and always there when it has something to say: "saved to your
+ * account" is only reassuring if its absence would be noticed.
+ */
+function showSync(state, detail) {
+  const chip = $("sync-state");
+  const words = {
+    off: ["", ""],
+    local: ["Only on this device", "Sign in from Account to keep this family across devices"],
+    unsaved: ["Not in your account", "Open Account to keep this family"],
+    syncing: ["Checking your account…", ""],
+    saving: ["Saving…", "Changes are sent a second after you stop"],
+    saved: ["Saved to your account", "Every change is kept automatically"],
+    clash: ["Took the newer copy", "Somebody else saved first — yours is kept in Account"],
+    error: [
+      `Not saved${detail ? ` — ${detail}` : ""}`,
+      "It will try again with your next change",
+    ],
+  };
+  const [label, title] = words[state] ?? ["", ""];
+  chip.textContent = label;
+  chip.title = title;
+  chip.hidden = label === "";
+  chip.className = `sync-chip sync-${state}`;
 }
 
 function syncButtons() {
@@ -993,6 +1055,9 @@ $("account-close").addEventListener("click", () => {
   $("account-panel").hidden = true;
 });
 
+// Whatever the chip says, the Account panel is where you do something about it.
+$("sync-state").addEventListener("click", () => $("account").click());
+
 $("who").addEventListener("click", () => {
   const panel = $("people-panel");
   panel.hidden = !panel.hidden;
@@ -1121,10 +1186,12 @@ async function renderAccount() {
           local.name || "Our household",
           snapshot,
         );
-        await call("/api/household/rename", { name: created.name });
-        latestState.household.remoteId = created.id;
+        // The last time anybody presses a button to save: from here the sync
+        // keeps it current on its own.
+        await sync.linkTo(created.id, created.revision ?? null);
+        render(await api.get());
         await renderAccount();
-        setStatus(`Saved. Invite someone from here whenever you like.`);
+        setStatus("Saved. Every change from now on goes up by itself.");
       }),
     );
   }
@@ -1134,14 +1201,13 @@ async function renderAccount() {
     row.append(el("strong", null, household.name));
     row.append(
       button("Open", false, async () => {
-        const stored = await account.loadState(household.id);
-        if (!stored?.state) {
+        const next = await sync.openHousehold(household.id);
+        if (!next) {
           setStatus("That household has no saved week yet.", true);
           return;
         }
-        await api.post("/api/restore", stored.state);
-        render(await api.get());
-        setStatus(`Opened ${household.name}.`);
+        render(next);
+        setStatus(`Opened ${household.name}. This device now stays in step with it.`);
       }),
     );
     row.append(
@@ -1152,6 +1218,31 @@ async function renderAccount() {
       }),
     );
     panel.append(row);
+  }
+
+  /* a change that lost a race — still here, and still somebody's evening */
+  const rescue = sync?.rescued();
+  if (rescue?.snapshot) {
+    const box = el("div", "account-rescue");
+    box.append(
+      el(
+        "p",
+        "account-note",
+        "A change made on this device was overtaken by one from somewhere else. " +
+          "It was kept rather than thrown away.",
+      ),
+      button("Put my version back", false, async () => {
+        const next = await sync.restoreRescue();
+        if (next) render(next);
+        await renderAccount();
+        setStatus("Put back, and sent up as the newest version.");
+      }),
+      button("Discard it", false, async () => {
+        sync.dropRescue();
+        await renderAccount();
+      }),
+    );
+    panel.append(box);
   }
 
   /* joining somebody else's */
@@ -1179,18 +1270,16 @@ async function renderAccount() {
       setStatus(message.message, true);
       return;
     }
-    const stored = await account.loadState(result.household_id);
-    if (stored?.state) {
-      await api.post("/api/restore", stored.state);
-      render(await api.get());
-    }
-    setStatus("Joined. Everything here is yours to change.");
+    const next = await sync.openHousehold(result.household_id);
+    if (next) render(next);
+    setStatus("Joined. Everything here is yours to change, and it stays in step.");
     await renderAccount();
   });
   panel.append(join);
 
   const out = button("Sign out", false, async () => {
     await account.signOut();
+    sync?.forget();
     await renderAccount();
   });
   out.classList.add("btn-quiet");
@@ -1730,14 +1819,31 @@ async function findAllProducts() {
 async function boot() {
   let state = await api.get();
 
+  /* The account is consulted before the intro screen. On a new device the
+     family already exists — it has just never been here before, and asking
+     somebody to type it in a second time is the bug this prevents. */
+  sync = await import("./sync.js");
+  sync.attach({ api: host, onState: render, onStatus: showSync });
+  const fromAccount = await sync.open(state).catch((error) => {
+    setStatus(`Could not reach your account: ${error.message}`, true);
+    return null;
+  });
+  if (fromAccount) state = fromAccount;
+
   if (!state.setUp) {
     const { runSetup } = await import("./setup.js");
     const shell = $("setup");
     shell.hidden = false;
     $("app-shell").hidden = true;
 
+    account ??= await import("./account.js");
     const draft = await runSetup(shell, {
       validate: async (d) => (await api.post("/api/household/validate", d)).issues,
+      // Somebody who has done this before on another device should not have to
+      // do it again here.
+      signIn: account.isConfigured()
+        ? () => account.signIn().catch((error) => setStatus(error.message, true))
+        : null,
     });
 
     state = draft

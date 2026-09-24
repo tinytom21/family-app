@@ -673,6 +673,17 @@ export function createApp(
         return ok();
       }
 
+      /* Which household in the account this browser is looking at.
+         Kept in the state, not in a variable, because a page reload used to
+         forget it — and a browser that has forgotten where it uploaded to
+         makes a second household the next time it saves. */
+      case "/api/household/link": {
+        const remoteId = typeof body.remoteId === "string" ? body.remoteId.trim() : "";
+        if (!remoteId) return bad(400, "remoteId required");
+        state.household = { ...state.household, remoteId };
+        return ok();
+      }
+
       case "/api/options": {
         if (typeof body.restockStaples === "boolean") {
           state.restockStaples = body.restockStaples;

@@ -16,9 +16,22 @@ import { fileURLToPath } from "node:url";
 
 import { createApp } from "../src/app-state.ts";
 import type { AiHooks, BasketHooks } from "../src/app-state.ts";
+import { readState, writeState } from "./state-file.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
 const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
+const PROJECT_DIR = fileURLToPath(new URL("..", import.meta.url));
+
+/**
+ * Where this machine keeps the household between restarts.
+ *
+ * A family is typed in once. Anything that asks for it a second time — a
+ * restarted server included — is a bug, so the snapshot is read at startup and
+ * written after every change.
+ */
+const STATE_FILE =
+  process.env.FAMILY_STATE_FILE ?? join(PROJECT_DIR, ".family-state.json");
+const savedState = readState(STATE_FILE);
 
 /**
  * Is there a usable model?
@@ -157,7 +170,73 @@ const basket: BasketHooks = await (async () => {
   };
 })();
 
-const app = createApp({ ai, basket });
+const app = createApp({ ai, basket, seed: savedState });
+
+/** Written after every change, so closing the terminal costs nothing. */
+function keepState(): void {
+  try {
+    writeState(STATE_FILE, app.snapshot());
+  } catch (error) {
+    // Worth saying out loud; not worth failing the change somebody just made.
+    const why = error instanceof Error ? error.message : String(error);
+    console.error(`  Could not save to ${STATE_FILE}: ${why}`);
+  }
+}
+
+/**
+ * The same Supabase project the published site uses, if this machine has been
+ * given one.
+ *
+ * Serving it here is what lets signing in on localhost and signing in on the
+ * real site reach the same household. Without it, the week planned locally —
+ * the one with the model behind it — never leaves this machine, which is
+ * exactly how a family ends up typing itself in twice.
+ */
+const supabaseConfig = await (async () => {
+  let config: { url: string; anonKey: string } | null = null;
+  const url = process.env.SUPABASE_URL?.trim();
+  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+  if (url && anonKey) config = { url, anonKey };
+
+  if (!config) {
+    try {
+      const raw = await readFile(
+        join(PROJECT_DIR, "..", "..", "supabase.config.json"),
+        "utf8",
+      );
+      const parsed = JSON.parse(raw);
+      if (parsed.url && parsed.anonKey) {
+        config = { url: parsed.url, anonKey: parsed.anonKey };
+      }
+    } catch {
+      /* absent is a valid state: accounts are simply off on this machine */
+    }
+  }
+
+  // The same refusal the published build makes (scripts/build-static.mjs). A
+  // secret key bypasses every Row Level Security policy in the database, and
+  // this file is handed straight to a browser.
+  if (config && isSecretKey(config.anonKey)) {
+    throw new Error(
+      "Refusing to serve a secret Supabase key. Use the publishable one (sb_publishable_…).",
+    );
+  }
+  return config;
+})();
+
+const accountsOn = supabaseConfig !== null;
+
+function isSecretKey(key: string): boolean {
+  if (/^sb_secret_/.test(key)) return true;
+  const payload = key.split(".")[1];
+  if (!payload) return false;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return claims?.role === "service_role";
+  } catch {
+    return false;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -183,6 +262,9 @@ const server = createServer(async (req, res) => {
     if (path.startsWith("/api/")) {
       const body = req.method === "POST" ? await readBody(req) : {};
       const result = await app.handle(path, body);
+      // Every change, straight to disk. A week's planning should not depend on
+      // this process staying alive.
+      if (req.method === "POST" && result.status < 400) keepState();
       res.writeHead(result.status, {
         "content-type": "application/json; charset=utf-8",
         "cache-control": "no-store",
@@ -213,15 +295,29 @@ const server = createServer(async (req, res) => {
        page asks for the same file and gets nothing — served explicitly rather
        than 404'd, so the console stays clean and the markup stays identical
        in both places. */
-    if (
-      (path === "/app/family-app.js" || path === "/app/supabase-config.js") &&
-      req.method === "GET"
-    ) {
+    if (path === "/app/family-app.js" && req.method === "GET") {
       res.writeHead(200, {
         "content-type": "text/javascript; charset=utf-8",
         "cache-control": "no-store",
       });
       res.end("/* served by web/server.ts; the client will use fetch */\n");
+      return;
+    }
+
+    /* Accounts locally too, from the same project the published build uses.
+       The published site writes this file at build time; serving it here means
+       signing in on localhost reaches the same household rather than quietly
+       starting a second one. */
+    if (path === "/app/supabase-config.js" && req.method === "GET") {
+      res.writeHead(200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(
+        supabaseConfig
+          ? `window.__SUPABASE_CONFIG=${JSON.stringify(supabaseConfig)};\n`
+          : "/* No Supabase project configured here: accounts are off. */\n",
+      );
       return;
     }
 
@@ -266,6 +362,16 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n  Family app spike — http://localhost:${PORT}\n`);
+  console.log(
+    savedState
+      ? `  Picked up where you left off — ${STATE_FILE}\n`
+      : `  Nothing saved yet. This household will be kept in ${STATE_FILE}\n`,
+  );
+  console.log(
+    accountsOn
+      ? "  Accounts are on: sign in here to keep this family in your account.\n"
+      : "  Accounts are off locally — no Supabase project configured for this machine.\n",
+  );
   console.log(
     ai.available
       ? "  A model key is present: the AI buttons are live.\n"
