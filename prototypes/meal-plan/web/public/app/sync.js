@@ -43,6 +43,14 @@ let onStatus = null;
 let user = null;
 let householdId = null;
 let revision = null;
+/**
+ * A fingerprint of the household as this browser last agreed with the account.
+ *
+ * It answers the only question that matters before taking the account's copy:
+ * has anything changed here since? A week edited on a laptop with no signal —
+ * or simply signed out — would otherwise be replaced without a word.
+ */
+let mark = null;
 
 let pushTimer = null;
 let pushing = false;
@@ -62,10 +70,27 @@ function readSeen() {
 
 function writeSeen() {
   try {
-    localStorage.setItem(SEEN, JSON.stringify({ householdId, revision }));
+    localStorage.setItem(SEEN, JSON.stringify({ householdId, revision, mark }));
   } catch {
     /* private browsing: sync still works, it just re-checks more often */
   }
+}
+
+/** Cheap and stable: only ever compared with itself. */
+function fingerprint(snapshot) {
+  const text = JSON.stringify(snapshot);
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${text.length}:${(hash >>> 0).toString(36)}`;
+}
+
+/** What is in this browser right now, and its fingerprint. */
+async function here() {
+  const snapshot = await api.post("/api/snapshot", {});
+  return { snapshot, mark: fingerprint(snapshot) };
 }
 
 export function rescued() {
@@ -138,7 +163,9 @@ export async function open(state) {
 
   const seen = readSeen();
   householdId = state?.household?.remoteId ?? seen?.householdId ?? null;
-  revision = seen?.householdId === householdId ? (seen?.revision ?? null) : null;
+  const sameHousehold = seen?.householdId === householdId;
+  revision = sameHousehold ? (seen?.revision ?? null) : null;
+  mark = sameHousehold ? (seen?.mark ?? null) : null;
 
   if (!householdId) {
     // Signed in on a device that has never opened one of these: take the
@@ -169,11 +196,12 @@ export async function open(state) {
     return null; // already the newest: nothing to do
   }
 
-  // About to replace what is in this browser. If it was set up here and never
-  // reached the account, it is somebody's typing, and it is kept where they
-  // can put it back.
-  if (state?.setUp && revision === null) {
-    keepRescue(await api.post("/api/snapshot", {}));
+  // About to replace what is in this browser. Anything changed here since the
+  // account last agreed with it — a week planned offline, or signed out — is
+  // somebody's work, and is kept where they can put it back.
+  if (state?.setUp) {
+    const local = await here();
+    if (local.mark !== mark) keepRescue(local.snapshot);
   }
 
   return await adopt(stored);
@@ -186,6 +214,9 @@ async function adopt(stored) {
     await api.post("/api/restore", stored.state);
     const next = await api.post("/api/household/link", { remoteId: householdId });
     revision = stored.revision;
+    // Taken from the app rather than from the blob that arrived, so the
+    // fingerprint is of what this browser is actually showing.
+    mark = (await here()).mark;
     writeSeen();
     say("saved");
     return next;
@@ -222,11 +253,12 @@ async function push() {
   }
   pushing = true;
   try {
-    const snapshot = await api.post("/api/snapshot", {});
+    const { snapshot, mark: pushed } = await here();
     const result = await account.saveState(householdId, snapshot, revision);
 
     if (result?.ok) {
       revision = result.revision;
+      mark = pushed;
       writeSeen();
       dropRescue();
       say("saved");
@@ -261,13 +293,16 @@ async function push() {
 export async function linkTo(id, startingRevision = null) {
   householdId = id;
   revision = startingRevision;
-  writeSeen();
   applying = true;
   try {
     await api.post("/api/household/link", { remoteId: id });
+    // Just uploaded from here, so the account and this browser agree — record
+    // that they do, or the next open would offer a rescue copy of nothing.
+    mark = startingRevision === null ? null : (await here()).mark;
   } finally {
     applying = false;
   }
+  writeSeen();
   if (startingRevision === null) touch();
   else say("saved");
 }
@@ -281,6 +316,7 @@ export async function linkTo(id, startingRevision = null) {
 export async function openHousehold(id) {
   householdId = id;
   revision = null;
+  mark = null;
   const stored = await account.loadState(id);
   if (!stored?.state) {
     writeSeen();
@@ -297,6 +333,7 @@ export function forget() {
   user = null;
   householdId = null;
   revision = null;
+  mark = null;
   try {
     localStorage.removeItem(SEEN);
   } catch {
