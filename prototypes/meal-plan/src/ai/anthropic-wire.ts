@@ -18,7 +18,13 @@ import type { Usage } from "./provider.ts";
 
 /** If the first model is busy, Anthropic picks another rather than failing. */
 export const ANTHROPIC_BETAS = ["server-side-fallback-2026-07-01"];
-export const DEFAULT_MODEL = "claude-opus-5";
+/**
+ * Sonnet 5.5: fast enough to finish a week inside the hosted function's time
+ * limit, and well under half the price of Opus for a task that is mostly
+ * following rules carefully. Override with CLAUDE_MODEL locally, PLAN_MODEL on
+ * the hosted function.
+ */
+export const DEFAULT_MODEL = "claude-sonnet-5-5";
 
 /* The endpoint and API version are deliberately absent. This module is bundled
    into a public web page, which never calls Anthropic directly — it asks the
@@ -81,23 +87,46 @@ export function readAnthropicMessage(message: any): GenerateResult {
   };
 }
 
-export const CLAUDE_USD_PER_MTOK = {
-  input: 5.0,
-  output: 25.0,
-  cacheReadMultiplier: 0.1,
-  cacheWriteMultiplier: 1.25,
+interface Price {
+  readonly input: number;
+  readonly output: number;
+  readonly cacheReadMultiplier: number;
+  readonly cacheWriteMultiplier: number;
+}
+
+/**
+ * US dollars per million tokens, from Anthropic's models page (October 2026).
+ *
+ * Per model, because one price for every model is how a plan from Sonnet came
+ * to be shown at two and a half times what it actually cost. A model missing
+ * from here is priced as the dearest one listed, so an unknown model can only
+ * ever be shown as costing too much, never too little.
+ */
+export const CLAUDE_USD_PER_MTOK: Record<string, Price> = {
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25 },
+  "claude-opus-5-5": { input: 4, output: 20, cacheReadMultiplier: 0.05, cacheWriteMultiplier: 1.25 },
+  "claude-haiku-4-5": { input: 1, output: 5, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25 },
+  "claude-sonnet-5": { input: 3, output: 15, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25 },
+  "claude-opus-5": { input: 5, output: 25, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25 },
 };
 
-export function claudeCostUsd(u: Usage): number {
+const DEAREST = Object.values(CLAUDE_USD_PER_MTOK).reduce((a, b) => (b.output > a.output ? b : a));
+
+/** Dated snapshot IDs ("claude-haiku-4-5-20251001") price as their family. */
+function priceFor(model: string): Price {
+  const known = Object.keys(CLAUDE_USD_PER_MTOK)
+    .filter((id) => model === id || model.startsWith(`${id}-2`))
+    .sort((a, b) => b.length - a.length)[0];
+  return known ? CLAUDE_USD_PER_MTOK[known] : DEAREST;
+}
+
+export function claudeCostUsd(u: Usage, model: string = DEFAULT_MODEL): number {
+  const p = priceFor(model);
   const m = 1_000_000;
   return (
-    (u.inputTokens / m) * CLAUDE_USD_PER_MTOK.input +
-    (u.outputTokens / m) * CLAUDE_USD_PER_MTOK.output +
-    (u.cachedReadTokens / m) *
-      CLAUDE_USD_PER_MTOK.input *
-      CLAUDE_USD_PER_MTOK.cacheReadMultiplier +
-    (u.cacheWriteTokens / m) *
-      CLAUDE_USD_PER_MTOK.input *
-      CLAUDE_USD_PER_MTOK.cacheWriteMultiplier
+    (u.inputTokens / m) * p.input +
+    (u.outputTokens / m) * p.output +
+    (u.cachedReadTokens / m) * p.input * p.cacheReadMultiplier +
+    (u.cacheWriteTokens / m) * p.input * p.cacheWriteMultiplier
   );
 }

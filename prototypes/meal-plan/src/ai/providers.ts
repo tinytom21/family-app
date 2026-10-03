@@ -65,7 +65,7 @@ export class ClaudeProvider implements PlanProvider {
   }
 
   costUsd(u: Usage): number {
-    return claudeCostUsd(u);
+    return claudeCostUsd(u, this.model);
   }
 
   async generate(request: GenerateRequest): Promise<GenerateResult> {

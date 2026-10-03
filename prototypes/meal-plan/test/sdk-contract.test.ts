@@ -114,7 +114,7 @@ test("each provider prices its own tokens", () => {
   const claude = new ClaudeProvider().costUsd(usage);
   const gemini = new GeminiProvider().costUsd(usage);
 
-  assert.equal(claude, 30, "Opus 5 is $5 in + $25 out per million");
+  assert.equal(claude, 12, "Sonnet 5.5, the default, is $2 in + $10 out per million");
   assert.equal(gemini, 4.5, "3.7 Flash is $0.75 in + $3.75 out per million");
   assert.ok(gemini < claude);
 });

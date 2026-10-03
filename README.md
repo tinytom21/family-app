@@ -124,11 +124,15 @@ week:
 
 | Model | Per plan | Per year |
 |---|---|---|
-| `claude-opus-5` (default) | ~$0.19 | ~$10 |
-| `claude-sonnet-5` | ~$0.11 | ~$6 |
+| `claude-sonnet-5-5` (default) | ~$0.07 | ~$4 |
+| `claude-opus-5-5` | ~$0.15 | ~$8 |
 | `claude-haiku-4-5` | ~$0.04 | ~$2 |
 
-Set one with `$env:CLAUDE_MODEL = "claude-sonnet-5"`. A repair round costs
+Sonnet 5.5 is the default because it is fast enough to finish a week inside
+the hosted function's 150-second limit, and a meal plan is mostly careful
+rule-following rather than deep reasoning. Model names use hyphens, not dots.
+Set one locally with `$env:CLAUDE_MODEL = "claude-opus-5-5"`, or for the
+website with the `PLAN_MODEL` secret. A repair round costs
 another call, so budget for two or three plans' worth on a bad week.
 
 Gemini's free tier allows **twenty requests a day**, which is under three

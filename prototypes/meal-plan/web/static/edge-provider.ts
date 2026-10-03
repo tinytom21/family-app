@@ -47,7 +47,9 @@ export class EdgeProvider implements PlanProvider {
   model = DEFAULT_MODEL;
 
   costUsd(usage: Usage): number {
-    return claudeCostUsd(usage);
+    // Priced by the model that actually answered, which the function reports —
+    // PLAN_MODEL on the server can differ from anything this page asked for.
+    return claudeCostUsd(usage, this.model);
   }
 
   async generate(request: GenerateRequest): Promise<GenerateResult> {

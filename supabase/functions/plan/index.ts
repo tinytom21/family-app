@@ -32,9 +32,19 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const ANTHROPIC_BETAS = "server-side-fallback-2026-07-01";
 
-/** Cheap enough to be wrong about. Anything dearer is a deliberate change here. */
-const MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"];
-const DEFAULT_MODEL = "claude-opus-5";
+/**
+ * What a page may ask for. Fable is deliberately absent: at five times
+ * Sonnet's price it is a choice for whoever owns the bill, made with
+ * PLAN_MODEL, not one a browser gets to make.
+ */
+const MODELS = [
+  "claude-sonnet-5-5",
+  "claude-opus-5-5",
+  "claude-haiku-4-5",
+  "claude-sonnet-5",
+  "claude-opus-5",
+];
+const DEFAULT_MODEL = "claude-sonnet-5-5";
 
 /** A week's plan is long; a request that wants far more is not a week's plan. */
 const MAX_TOKENS_CEILING = 32000;
@@ -52,7 +62,10 @@ const DAILY_CALLS = Number(Deno.env.get("PLAN_DAILY_CALLS") ?? 20);
  * means the page gets a sentence it can show instead.
  */
 const DEADLINE_MS = Number(Deno.env.get("PLAN_DEADLINE_MS") ?? 140_000);
-const FORCED_MODEL = Deno.env.get("PLAN_MODEL")?.trim();
+// Quotes stripped: the secrets screen saves exactly what is typed, and
+// "claude-sonnet-5-5" pasted with its quotation marks is a model that does not
+// exist — an error that reads like the model being wrong rather than the box.
+const FORCED_MODEL = Deno.env.get("PLAN_MODEL")?.trim().replace(/^["']+|["']+$/g, "");
 
 /* The published site and a laptop are different origins, so this is a
    cross-origin call and the browser will ask first. Anything not on the list
@@ -256,7 +269,7 @@ Deno.serve(async (req) => {
         {
           error:
             `The plan took longer than ${Math.round(DEADLINE_MS / 1000)} seconds, which is as long ` +
-            `as this server allows. A faster model fixes it: set PLAN_MODEL to claude-sonnet-5.`,
+            `as this server allows. A faster model fixes it: set PLAN_MODEL to claude-haiku-4-5.`,
         },
         408,
         origin,
