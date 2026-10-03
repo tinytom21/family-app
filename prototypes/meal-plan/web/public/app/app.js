@@ -131,7 +131,12 @@ function showSync(state, detail) {
       "It will try again with your next change",
     ],
   };
-  const [label, title] = words[state] ?? ["", ""];
+  let [label, title] = words[state] ?? ["", ""];
+  // The time, because "saved" with no time is a claim; "saved 14:32" is
+  // something you can check against the change you just made.
+  if (state === "saved") {
+    label += ` · ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  }
   chip.textContent = label;
   chip.title = title;
   chip.hidden = label === "";
@@ -140,7 +145,6 @@ function showSync(state, detail) {
 
 function syncButtons() {
   $("replan").disabled = busy || !window.__modelAvailable;
-  $("reset").disabled = busy;
   $("calendar").disabled = busy;
   $("capture-go").disabled = busy || !window.__modelAvailable;
   $("capture-plain").disabled = busy;
@@ -175,12 +179,53 @@ function render(state) {
   $("week-source").textContent =
     state.source === "model"
       ? `${state.lastRun.model} · ${state.lastRun.attempts} attempt${state.lastRun.attempts > 1 ? "s" : ""} · $${state.lastRun.costUsd.toFixed(4)} · ${state.lastRun.seconds}s`
-      : "fixture week";
+      : "starter week — Replan with AI for one of your own";
 
   $("replan").title = state.modelAvailable
-    ? "Generate a fresh week with the configured model"
-    : "Set ANTHROPIC_API_KEY or GEMINI_API_KEY to enable this";
+    ? "Plan this week with AI, around the table, your notes and what is in the house"
+    : window.__familyApi
+      ? "Sign in from Account, with the household saved there, to plan with AI"
+      : "Set ANTHROPIC_API_KEY to plan with AI on this machine";
+
+  renderWeekWords(state);
+  if (state.household.name) document.title = `The week · ${state.household.name}`;
   syncButtons();
+}
+
+/**
+ * The start date and the family's own words.
+ *
+ * None of these is redrawn while somebody is typing in it: a save from another
+ * device arriving mid-sentence must not snatch the box from under them.
+ */
+function renderWeekWords(state) {
+  const typing = (id) => document.activeElement === $(id);
+
+  if (!typing("week-start")) $("week-start").value = state.plan.weekStarting;
+  if (!typing("week-note")) $("week-note").value = state.week.note ?? "";
+  if (!typing("instructions")) $("instructions").value = state.household.instructions ?? "";
+
+  // The standing rules, shown where the week is planned, so nobody writes
+  // "pizza Friday" into this week's notes not knowing it is already a rule.
+  const line = $("standing-line");
+  const standing = state.household.instructions?.trim();
+  line.replaceChildren();
+  line.hidden = !standing;
+  if (standing) {
+    const change = el("button", null, "change");
+    change.type = "button";
+    change.addEventListener("click", () => {
+      if ($("people-panel").hidden) $("who").click();
+      $("instructions").focus();
+    });
+    line.append(`Every week: ${standing} (`, change, ")");
+  }
+
+  // A plan for a week that is already over is a plan nobody will cook.
+  const last = state.plan.meals.map((m) => m.date).sort().at(-1);
+  if (last && last < state.today && !$("status").textContent) {
+    setStatus("This plan is for a week that has gone. Pick this week's start date above the table.");
+  }
 }
 
 function asDate(iso) {
@@ -943,30 +988,28 @@ const sundayPlus = (weekday) => {
 /* ---------------- calendar ---------------- */
 
 /**
- * The Supabase project details are whatever the setup checker saved, so the
- * two pages share one configuration and there is nothing extra to fill in here.
+ * Read this week from Google Calendar.
  *
- * The Google token used below lives in this browser, which is fine for a
- * prototype and wrong for the real thing: the agenda has to refresh overnight
- * with nobody signed in, which is what the stored refresh token is for.
+ * Uses the one account client, and a calendar token kept for the hour it
+ * lasts. With no token it goes to Google and comes straight back here with a
+ * marker that finishes the read by itself — rather than the old detour via the
+ * setup-check page, which is where most of the repeated sign-ins came from.
  */
-function supabaseCreds() {
-  try {
-    return JSON.parse(localStorage.getItem("family-app.supabase") ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
-function sendToChecker(message) {
-  setStatus(`${message} Opening the setup page…`, true);
-  setTimeout(() => (location.href = "../check-google.html"), 1600);
-}
-
 async function connectCalendar(state) {
-  const { url, key } = supabaseCreds();
-  if (!url || !key) {
-    sendToChecker("This browser has no Supabase project saved.");
+  account ??= await import("./account.js");
+  if (!account.isConfigured()) {
+    setStatus("Accounts are off in this copy, so there is no Google sign-in to read a calendar with.", true);
+    return;
+  }
+
+  const saved = account.calendarToken();
+  if (!saved) {
+    setStatus("Asking Google for your calendar — you will come straight back here.");
+    try {
+      await account.connectGoogleCalendar();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
     return;
   }
 
@@ -974,14 +1017,7 @@ async function connectCalendar(state) {
   syncButtons();
   setStatus("Reading your calendar…");
   try {
-    const sb = window.supabase.createClient(url, key);
-    const { data } = await sb.auth.getSession();
-    const session = data.session;
-
-    if (!session?.provider_token) {
-      sendToChecker("No Google token in this browser.");
-      return;
-    }
+    const session = { provider_token: saved.token, user: { email: saved.email } };
 
     const dates = state.plan.meals.map((m) => m.date).sort();
     const params = new URLSearchParams({
@@ -998,8 +1034,12 @@ async function connectCalendar(state) {
     const body = await res.json();
     if (!res.ok) {
       const reason = body?.error?.message ?? `HTTP ${res.status}`;
-      if (res.status === 401) {
-        sendToChecker(`Google token has expired (${reason}).`);
+      if (res.status === 401 || res.status === 403) {
+        // Expired early, revoked, or a token that never had calendar access.
+        // One more trip to Google sorts all three.
+        account.forgetCalendarToken();
+        setStatus("Google wants you to confirm calendar access again — back in a moment.");
+        await account.connectGoogleCalendar();
         return;
       }
       throw new Error(reason);
@@ -1107,19 +1147,23 @@ $("restock").addEventListener("change", (event) =>
 );
 $("replan").addEventListener("click", () => call("/api/plan/generate"));
 
-/* On the hosted demo there is no `npm run web` to restart, and state persists
-   in this browser, so Reset has to mean "clear everything" rather than just
-   "put the fixture plan back". */
-if (window.__familyApi?.reset) {
-  $("reset").textContent = "Start over";
-  $("reset").title =
-    "Clear this browser's saved demo and go back to the fixture week";
-  $("reset").addEventListener("click", async () => {
-    render(await window.__familyApi.reset());
-  });
-} else {
-  $("reset").addEventListener("click", () => call("/api/plan/reset"));
-}
+/* The week's start date. Changing it moves the plan onto the new days and
+   remembers the weekday, so it is a one-off for most families. */
+$("week-start").addEventListener("change", (event) => {
+  if (event.target.value) call("/api/week/start", { date: event.target.value });
+});
+
+/* The family's own words. Saved when the box is left, which is when somebody
+   has finished a thought — not on every keystroke, which would re-plan the
+   screen under their typing and send a save to the account per letter. */
+$("week-note").addEventListener("change", async (event) => {
+  const saved = await call("/api/week/note", { text: event.target.value });
+  if (saved) setStatus("Noted for this week. Replan with AI to use it.");
+});
+$("instructions").addEventListener("change", async (event) => {
+  const saved = await call("/api/household/instructions", { text: event.target.value });
+  if (saved) setStatus("Kept for every week. Replan with AI to use it.");
+});
 
 /* ---------------- account ---------------- */
 
@@ -1861,6 +1905,11 @@ async function boot() {
     shell.replaceChildren();
     $("app-shell").hidden = false;
 
+    // Signed in already? Then the household just typed goes straight into the
+    // account, with no separate save step to forget.
+    const saved = await sync.open(state).catch(() => null);
+    if (saved) state = saved;
+
     if (draft?.people?.length && state.unrecognised?.length) {
       // Said out loud rather than swallowed: an exclusion the validator cannot
       // enforce has been demoted, and the person who typed it should know.
@@ -1875,6 +1924,19 @@ async function boot() {
   }
 
   render(state);
+
+  // Back from Google with calendar access: finish what the button started,
+  // rather than making somebody press it a second time.
+  const params = new URLSearchParams(location.search);
+  if (params.get("then") === "calendar") {
+    history.replaceState(null, "", location.pathname);
+    await connectCalendar(latestState);
+  } else if (state.setUp && !sync.linkedHousehold() && window.__SUPABASE_CONFIG) {
+    // Set up, but only in this browser. Said on every visit until it is no
+    // longer true, because this is exactly how people later discover their
+    // family was never saved anywhere else.
+    setStatus("Your family is saved in this browser only. Sign in from Account to keep it safe and use it on your phone.");
+  }
 }
 
 await boot();

@@ -151,6 +151,10 @@ export interface DraftPerson {
 export interface HouseholdDraft {
   householdName: string;
   people: DraftPerson[];
+  /** Anything the family wants every week, in their own words. */
+  instructions?: string;
+  /** 0 = Sunday … 6 = Saturday. Monday unless they say otherwise. */
+  weekStartsOn?: number;
 }
 
 export type DraftIssue = { field: string; message: string };

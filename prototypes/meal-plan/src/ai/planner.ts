@@ -127,7 +127,34 @@ ${larder}
 
 SLOTS TO FILL
 ${slotList}
-${constraints.notes ? `\nFROM THE FAMILY\n${constraints.notes}` : ""}`;
+${familySection(constraints)}`;
+}
+
+/**
+ * The family's own words, in two layers.
+ *
+ * Standing instructions are what they want every week; this week's notes are
+ * what is different about these seven days, and win where the two disagree —
+ * "pizza on Fridays" yields to "out for dinner Friday". Neither outranks an
+ * allergy, and the prompt says so, because free text is exactly where "just
+ * this once" gets written.
+ */
+function familySection(c: PlanConstraints): string {
+  const parts: string[] = [];
+  if (c.standing) {
+    parts.push(
+      "EVERY WEEK — the family's standing instructions. Follow them. Only an allergy outranks them.\n" +
+        c.standing,
+    );
+  }
+  if (c.thisWeek) {
+    parts.push(
+      "THIS WEEK ONLY — notes for these days. Where they disagree with the standing instructions, these win. An allergy still outranks both.\n" +
+        c.thisWeek,
+    );
+  }
+  if (c.notes) parts.push(`FROM THE FAMILY\n${c.notes}`);
+  return parts.length ? `\n${parts.join("\n\n")}` : "";
 }
 
 /**

@@ -35,11 +35,17 @@ const BRACKETS = [
  * rather just look round the example family first.
  */
 export function runSetup(root, options = {}) {
-  const { validate, allowExample = true, signIn = null } = options;
+  const { validate, signIn = null } = options;
 
   return new Promise((resolve) => {
     let step = 0;
-    let draft = { householdName: "", people: rebuild([], 2, 2) };
+    let draft = {
+      householdName: "",
+      people: rebuild([], 2, 2),
+      // Monday unless they say otherwise: the day most families shop for.
+      weekStartsOn: 1,
+      instructions: "",
+    };
     let issues = [];
 
     const render = () => {
@@ -89,14 +95,6 @@ export function runSetup(root, options = {}) {
       next.addEventListener("click", onNext);
       bar.append(next);
 
-      if (step === 0 && allowExample) {
-        const skip = el("button", "btn btn-quiet", "Show me an example family");
-        skip.type = "button";
-        skip.title = "Look round with made-up data; you can set yours up later";
-        skip.addEventListener("click", () => resolve(null));
-        bar.append(skip);
-      }
-
       // Somebody who has done this before, on another device, should not be
       // made to do it again here.
       if (step === 0 && signIn) {
@@ -137,8 +135,11 @@ export function runSetup(root, options = {}) {
           "A rough answer is fine — you can add or remove people at any point.",
         ),
         footer(null, "Next", () => {
+          // Spread, not rebuilt field by field: listing the fields here is how
+          // the week's start day once went missing on this very step, and the
+          // screen showed Sunday while the household was created on Monday.
           draft = {
-            householdName: draft.householdName,
+            ...draft,
             people: rebuild(draft.people, adults.value(), children.value()),
           };
           step = 1;
@@ -288,6 +289,38 @@ export function runSetup(root, options = {}) {
         list.append(row);
       }
       body.append(list);
+
+      /* The household's own rules: which day the week starts, and anything
+         that should hold every week. Both changeable later, from the week
+         itself and from Who lives here. */
+      const house = el("div", "setup-detail setup-house");
+      house.append(el("h2", null, "Every week"));
+
+      const startWrap = el("label", "setup-field");
+      startWrap.append(el("span", "setup-field-label", "Our weeks start on"));
+      const start = document.createElement("select");
+      ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].forEach(
+        (day, index) => {
+          const option = new Option(day, String(index));
+          option.selected = index === (draft.weekStartsOn ?? 1);
+          start.append(option);
+        },
+      );
+      start.addEventListener("change", () => (draft.weekStartsOn = Number(start.value)));
+      startWrap.append(start);
+
+      const rulesWrap = el("label", "setup-field");
+      rulesWrap.append(el("span", "setup-field-label", "Always, every week (optional)"));
+      const rules = document.createElement("textarea");
+      rules.rows = 3;
+      rules.maxLength = 2000;
+      rules.placeholder = "Pizza on Fridays. Something quick on swimming nights. No fish on Mondays.";
+      rules.value = draft.instructions ?? "";
+      rules.addEventListener("input", () => (draft.instructions = rules.value));
+      rulesWrap.append(rules);
+
+      house.append(startWrap, rulesWrap);
+      body.append(house);
 
       body.append(
         el(

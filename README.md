@@ -4,7 +4,7 @@ One app to replace the pile of apps: meal planning, the larder, the family
 agenda, shopping lists, tasks and reminders, and spending analysis. Web first,
 so it works on a laptop the day it exists.
 
-**[Try it](https://tinytom21.github.io/family-app/app/)** ·
+**[Open the app](https://tinytom21.github.io/family-app/)** ·
 **[The build plan](https://tinytom21.github.io/family-app/plan.html)**
 
 The hosted site runs the real domain code in your browser — the same modules

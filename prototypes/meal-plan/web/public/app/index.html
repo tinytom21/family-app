@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The week — family app spike</title>
+  <title>The week</title>
   <link rel="stylesheet" href="app.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏠</text></svg>">
 </head>
@@ -55,7 +55,6 @@
       <button type="button" id="who" class="btn">Who lives here</button>
       <button type="button" id="calendar" class="btn">Connect calendar</button>
       <button type="button" id="replan" class="btn btn-primary">Replan with AI</button>
-      <button type="button" id="reset" class="btn">Reset</button>
     </div>
   </div>
   <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -67,6 +66,10 @@
     <div>
       <h2 id="h-grid">This week's table</h2>
       <p id="grid-sub" class="grid-sub"></p>
+      <label class="week-start">
+        <span>Week starting</span>
+        <input type="date" id="week-start">
+      </label>
     </div>
     <div class="grid-actions">
       <button type="button" id="grid-reset" class="btn">Back to the calendar</button>
@@ -81,6 +84,12 @@
     <span class="chip assumed">assumed</span> nobody's calendar says ·
     <span class="chip override">you</span> someone corrected it
   </p>
+  <label class="note-box">
+    <span class="note-label">Anything different this week?</span>
+    <textarea id="week-note" rows="2" maxlength="2000"
+      placeholder="Jess away Thursday · use up the leftover chicken · birthday tea on Saturday"></textarea>
+  </label>
+  <p id="standing-line" class="standing-line" hidden></p>
 </section>
 
 <!-- Account and family sharing. Hidden until asked for. -->
@@ -116,6 +125,11 @@
     </div>
     <button type="button" id="people-close" class="btn">Done</button>
   </div>
+  <label class="note-box">
+    <span class="note-label">Every week</span>
+    <textarea id="instructions" rows="2" maxlength="2000"
+      placeholder="Pizza on Fridays · something quick on swimming nights · no fish on Mondays"></textarea>
+  </label>
   <ul id="people" class="people"></ul>
   <form id="add-person" class="add-person">
     <input type="text" id="new-name" placeholder="Name" aria-label="Name" required>

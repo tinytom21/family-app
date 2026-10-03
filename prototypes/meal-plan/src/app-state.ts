@@ -50,7 +50,7 @@ import {
 import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
-import { nextWeekStart, redatePlan, todayIn } from "./domain/week.ts";
+import { nextStartOn, redatePlan, todayIn, weekdayIndex } from "./domain/week.ts";
 import { linksFor, searchTermFor } from "./domain/retailers.ts";
 import {
   CONFIDENT,
@@ -153,6 +153,10 @@ export interface HouseholdInfo {
   setUp: boolean;
   /** Set once the household exists in Supabase rather than only in a browser. */
   remoteId?: string;
+  /** What the family wants every week, in their words: "pizza on Fridays". */
+  instructions?: string;
+  /** 0 = Sunday … 6 = Saturday. The day a planned week begins; Monday if unsaid. */
+  weekStartsOn?: number;
 }
 
 /** The part of the state worth keeping between visits. */
@@ -170,6 +174,12 @@ export interface Snapshot {
   confirmedWeek: string | null;
   restockStaples: boolean;
   calendarConnectedAs: string | null;
+  /**
+   * What is different about a particular week, keyed by the date it starts.
+   * Per week on purpose: last week's "Jess away Thursday" must not quietly
+   * apply forever. Optional because households saved before it existed lack it.
+   */
+  weekNotes?: Record<string, string>;
 }
 
 function freshSnapshot(): Snapshot {
@@ -188,6 +198,7 @@ function freshSnapshot(): Snapshot {
     confirmedWeek: null,
     restockStaples: false,
     calendarConnectedAs: null,
+    weekNotes: {},
   };
 }
 
@@ -250,8 +261,19 @@ export function createApp(
       },
     });
 
+  /** This week's notes, for whichever week the plan is currently on. */
+  const weekNote = (): string =>
+    (state.weekNotes ?? {})[state.plan.weekStarting]?.trim() ?? "";
+
   const currentConstraints = (): PlanConstraints => ({
     ...CONSTRAINTS,
+    // CONSTRAINTS.notes is the example family's text — a made-up child's nut
+    // allergy and their swimming night. It used to ride along from here into
+    // every real household's prompt. A family's instructions now come from
+    // that family and nowhere else.
+    notes: undefined,
+    standing: state.household.instructions?.trim() || undefined,
+    thisWeek: weekNote() || undefined,
     people: state.people,
     // The plan's own week, not the fixture's — otherwise a household set up in
     // September is asked to plan a week in August.
@@ -344,7 +366,8 @@ export function createApp(
         remoteId: state.household.remoteId ?? null,
         people: state.people.map((p) => ({ ...p, portion: portionFor(p) })),
         portions: householdPortions(state.people),
-        notes: CONSTRAINTS.notes,
+        instructions: state.household.instructions ?? "",
+        weekStartsOn: state.household.weekStartsOn ?? 1,
         weekStarting: state.plan.weekStarting,
         maxWeeknightMinutes: CONSTRAINTS.maxWeeknightMinutes,
         maxWeekendMinutes: CONSTRAINTS.maxWeekendMinutes,
@@ -355,6 +378,7 @@ export function createApp(
       },
       week: {
         days: week,
+        note: weekNote(),
         connected: state.connected,
         confirmed: state.confirmedWeek === (week[0]?.date ?? null),
         /** How much of the grid is still a guess rather than a fact. */
@@ -459,18 +483,26 @@ export function createApp(
         if (issues.length) return { status: 400, body: { issues } };
 
         const { people, unrecognised } = peopleFromDraft(body);
+        const weekStartsOn =
+          Number.isInteger(body.weekStartsOn) && body.weekStartsOn >= 0 && body.weekStartsOn <= 6
+            ? body.weekStartsOn
+            : 1;
         state.people = people;
         state.household = {
           name: body.householdName.trim(),
           setUp: true,
+          instructions: cleanText(body.instructions),
+          weekStartsOn,
           ...(state.household.remoteId ? { remoteId: state.household.remoteId } : {}),
         };
 
-        // The starter week is moved onto the days actually coming up. Left on
-        // the fixture's dates it would all be in the past, and the calendar
-        // read, the jobs scheduler and every due date would quietly misbehave.
+        // The starter week is moved onto the week actually coming up, starting
+        // on the family's own day. Left on the fixture's dates it would all be
+        // in the past, and the calendar read, the jobs scheduler and every due
+        // date would quietly misbehave.
         state.today = realToday;
-        state.plan = redatePlan(GOOD_PLAN, nextWeekStart(realToday));
+        state.plan = redatePlan(GOOD_PLAN, nextStartOn(realToday, weekStartsOn));
+        state.weekNotes = {};
 
         // A real family starts with an empty cupboard and no jobs — those are
         // theirs to fill. The starter week stays as something to look at and
@@ -495,7 +527,13 @@ export function createApp(
         // dates and jobs are all written against it, and re-dating half of them
         // would make the example demonstrate nothing.
         state.today = TODAY;
-        state.household = { name: "The Hardys", setUp: true };
+        // Their notes are theirs: given to the example household explicitly,
+        // rather than spread into everyone's prompt from the constraints.
+        state.household = {
+          name: "The Hardys",
+          setUp: true,
+          instructions: CONSTRAINTS.notes ?? "",
+        };
         state.source = "fixture";
         state.lastRun = null;
         state.lastCapture = null;
@@ -681,6 +719,49 @@ export function createApp(
         const remoteId = typeof body.remoteId === "string" ? body.remoteId.trim() : "";
         if (!remoteId) return bad(400, "remoteId required");
         state.household = { ...state.household, remoteId };
+        return ok();
+      }
+
+      /* What the family wants every week. Free text on purpose — "pizza on
+         Fridays" does not fit a form — so it reaches the planner as words, and
+         nothing here pretends it can check them. */
+      case "/api/household/instructions": {
+        state.household = { ...state.household, instructions: cleanText(body.text) };
+        return ok();
+      }
+
+      /* Which day this week begins. The plan moves onto the new dates rather
+         than being thrown away, and the weekday is remembered, so a family
+         that shops Monday to Sunday only has to say so once. */
+      case "/api/week/start": {
+        const date = typeof body.date === "string" ? body.date : "";
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+          Number.isNaN(Date.parse(`${date}T00:00:00Z`))
+        ) {
+          return bad(400, "A date like 2026-10-05 is needed.");
+        }
+        const from = state.plan.weekStarting;
+        const notes = { ...(state.weekNotes ?? {}) };
+        // A note written before the date was changed is about the week being
+        // planned, not about the old date. It moves with it.
+        if (notes[from] && !notes[date]) {
+          notes[date] = notes[from];
+          delete notes[from];
+        }
+        state.weekNotes = notes;
+        state.plan = redatePlan(state.plan, date);
+        state.household = { ...state.household, weekStartsOn: weekdayIndex(date) };
+        return ok();
+      }
+
+      /* Anything different about this particular week. */
+      case "/api/week/note": {
+        const text = cleanText(body.text);
+        const notes = { ...(state.weekNotes ?? {}) };
+        if (text) notes[state.plan.weekStarting] = text;
+        else delete notes[state.plan.weekStarting];
+        state.weekNotes = notes;
         return ok();
       }
 
@@ -1070,6 +1151,7 @@ export function createApp(
       confirmedWeek: state.confirmedWeek,
       restockStaples: state.restockStaples,
       calendarConnectedAs: state.calendarConnectedAs,
+      weekNotes: state.weekNotes ?? {},
     };
   }
 
@@ -1094,3 +1176,11 @@ const NO_MODEL =
 
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * A family's own words, trimmed and kept to a sane length. Long enough for a
+ * paragraph of house rules; short enough that a pasted cookbook does not end
+ * up in every prompt, paid for every week.
+ */
+const cleanText = (value: unknown): string =>
+  typeof value === "string" ? value.trim().slice(0, 2000) : "";

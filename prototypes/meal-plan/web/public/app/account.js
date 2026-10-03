@@ -48,6 +48,10 @@ export function getClient() {
   client = window.supabase.createClient(config.url, config.key, {
     auth: { detectSessionInUrl: true, persistSession: true },
   });
+  // Google's calendar token arrives once, in the session that comes back from
+  // signing in, and Supabase neither keeps it across a reload nor renews it.
+  // So it is caught here, on the way past, and kept for the hour it lasts.
+  client.auth.onAuthStateChange((_event, session) => keepCalendarToken(session));
   return client;
 }
 
@@ -64,6 +68,15 @@ export async function currentUser() {
   return data.session?.user ?? null;
 }
 
+/**
+ * Sign in to the account. Just that.
+ *
+ * This used to ask for calendar access and force Google's consent screen
+ * every time, which is why signing in felt like a form rather than a click.
+ * Now it asks only who you are, so Google can usually wave you straight
+ * through, and the session then lasts for weeks. Reading a calendar is asked
+ * for separately, when somebody presses the button that needs it.
+ */
 export async function signIn() {
   const supabase = getClient();
   if (!supabase) throw new Error(NOT_CONFIGURED);
@@ -73,8 +86,75 @@ export async function signIn() {
       // Straight back to this page, which is the URL that has to be on
       // Supabase's Redirect URLs allow list.
       redirectTo: `${location.origin}${location.pathname}`,
-      scopes: "https://www.googleapis.com/auth/calendar.readonly",
-      queryParams: { access_type: "offline", prompt: "consent" },
+    },
+  });
+  if (error) throw new Error(error.message);
+}
+
+/* ------------------------------------------------------------------ */
+/* Reading a Google Calendar                                           */
+/* ------------------------------------------------------------------ */
+
+const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const CALENDAR_TOKEN = "family-app.google-calendar";
+/** Google's tokens last an hour. A little less, so one never dies mid-read. */
+const CALENDAR_TOKEN_MS = 55 * 60 * 1000;
+/** Marks the trip to Google as being for the calendar, so the return can finish it. */
+export const CALENDAR_RETURN = "calendar";
+
+function keepCalendarToken(session) {
+  // Every sign-in brings a Google token, but only one that went out asking for
+  // the calendar can read it. The marker on the way back says which this was.
+  if (!session?.provider_token) return;
+  if (new URLSearchParams(location.search).get("then") !== CALENDAR_RETURN) return;
+  try {
+    localStorage.setItem(
+      CALENDAR_TOKEN,
+      JSON.stringify({
+        token: session.provider_token,
+        email: session.user?.email ?? null,
+        expiresAt: Date.now() + CALENDAR_TOKEN_MS,
+      }),
+    );
+  } catch {
+    /* without storage it simply asks again next time */
+  }
+}
+
+/** A calendar token that still works, or null. */
+export function calendarToken() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CALENDAR_TOKEN) ?? "null");
+    return saved?.token && saved.expiresAt > Date.now() ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetCalendarToken() {
+  try {
+    localStorage.removeItem(CALENDAR_TOKEN);
+  } catch {
+    /* already gone */
+  }
+}
+
+/**
+ * Go to Google for calendar access, and come back here to finish.
+ *
+ * No forced consent screen: Google shows it the first time and, after that,
+ * usually just confirms the account. The page this returns to carries a marker
+ * so the calendar read carries on by itself — rather than the old detour to a
+ * setup page and a second press of the same button.
+ */
+export async function connectGoogleCalendar() {
+  const supabase = getClient();
+  if (!supabase) throw new Error(NOT_CONFIGURED);
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${location.origin}${location.pathname}?then=${CALENDAR_RETURN}`,
+      scopes: CALENDAR_SCOPE,
     },
   });
   if (error) throw new Error(error.message);

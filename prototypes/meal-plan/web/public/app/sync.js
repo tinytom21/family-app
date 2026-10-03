@@ -194,10 +194,36 @@ async function openOrGiveUp(state) {
   if (!householdId) {
     // Signed in on a device that has never opened one of these: take the
     // household the account already has.
-    const households = await account.myHouseholds().catch(() => []);
+    const households = await account.myHouseholds();
     householdId = households[0]?.id ?? null;
     revision = null;
   }
+
+  if (!householdId && state?.setUp) {
+    // Signed in, with a family set up here and none in the account. Putting it
+    // there is the entire reason anybody signs in, so it happens now — the old
+    // separate "Save to my account" button was a step people did not know they
+    // had missed until a phone showed an empty house.
+    say("saving");
+    const snapshot = await api.post("/api/snapshot", {});
+    const created = await account.createHousehold(
+      state.household?.name || "Our household",
+      snapshot,
+    );
+    householdId = created.id;
+    revision = created.revision ?? null;
+    applying = true;
+    try {
+      const next = await api.post("/api/household/link", { remoteId: householdId });
+      mark = (await here()).mark;
+      writeSeen();
+      say("saved");
+      return next;
+    } finally {
+      applying = false;
+    }
+  }
+
   if (!householdId) {
     say("unsaved");
     return null;

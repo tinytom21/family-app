@@ -165,6 +165,10 @@ export interface PlanConstraints {
   readonly pantry: readonly PantryItem[];
   /** Free-text steer, e.g. "we're trying to eat less red meat". */
   readonly notes?: string;
+  /** What the family wants every week: "pizza on Fridays". Their words. */
+  readonly standing?: string;
+  /** What is different about this particular week. Wins over `standing`. */
+  readonly thisWeek?: string;
 }
 
 /* ---------- Shopping list output ---------- */

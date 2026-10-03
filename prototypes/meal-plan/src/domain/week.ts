@@ -40,6 +40,25 @@ export function nextWeekStart(today: string): string {
   return addDays(today, 1);
 }
 
+/** 0 = Sunday … 6 = Saturday, read off the date itself rather than any clock. */
+export function weekdayIndex(date: string): number {
+  return new Date(`${date}T00:00:00Z`).getUTCDay();
+}
+
+/**
+ * The next week, for a family whose weeks begin on `weekday`.
+ *
+ * Strictly after today, because tonight's dinner is decided by the time
+ * anybody is filling in a plan. "Tomorrow" was the old answer and it was
+ * wrong for nearly everyone: people shop for a week that starts on a
+ * particular day, and a plan that starts on a Sunday because the app was
+ * opened on a Saturday is a plan that has to be moved before it is used.
+ */
+export function nextStartOn(today: string, weekday = 1): string {
+  const ahead = (weekday - weekdayIndex(today) + 7) % 7 || 7;
+  return addDays(today, ahead);
+}
+
 export function weekDates(start: string, days = 7): string[] {
   return Array.from({ length: days }, (_, i) => addDays(start, i));
 }

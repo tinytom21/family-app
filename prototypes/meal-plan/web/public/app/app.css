@@ -1,5 +1,11 @@
 /* Same palette as the build plan, so the project reads as one thing. */
 
+/* `hidden` means hidden. Without this, any rule that sets `display` — the
+   panels are all `display: flex` — quietly wins over the attribute, and the
+   Account, Basket and Who-lives-here panels sat permanently open at the foot
+   of the page while their buttons appeared to do nothing. */
+[hidden] { display: none !important; }
+
 :root {
   --ground:      #F3F4F1;
   --surface:     #FBFBFA;
@@ -243,11 +249,16 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 /* an allergy is not a preference and should not look like one */
 .setup-field.danger .setup-field-label { color: var(--blocked); }
-.setup-field input {
+.setup-field input,
+.setup-field select,
+.setup-field textarea {
   font: inherit; font-size: .85rem; padding: .32rem .45rem; width: 100%;
   border: 1px solid var(--rule-strong); border-radius: 4px;
   background: var(--ground); color: var(--ink);
 }
+.setup-field textarea { resize: vertical; line-height: 1.45; }
+/* the household's own rules span the row rather than sitting in a column */
+.setup-house .setup-field:last-child { grid-column: 1 / -1; }
 .setup-field.danger input { border-color: var(--blocked); }
 .setup-household-name input { font-size: .95rem; padding: .45rem .55rem; }
 
@@ -843,6 +854,42 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   background: var(--ground); color: var(--ink);
 }
 .basket-error { font-size: .78rem; color: var(--blocked); }
+
+/* ---------- the week's start, and the family's own words ---------- */
+
+.week-start {
+  display: inline-flex; align-items: center; gap: .5rem;
+  margin-top: .45rem;
+  font-family: var(--mono); font-size: .66rem;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint);
+}
+.week-start input {
+  font: inherit; font-family: var(--mono); font-size: .8rem;
+  letter-spacing: normal; text-transform: none;
+  padding: .2rem .4rem; border-radius: 3px;
+  border: 1px solid var(--rule-strong);
+  background: var(--ground); color: var(--ink);
+  color-scheme: light dark;
+}
+
+.note-box { display: flex; flex-direction: column; gap: .3rem; margin-top: .9rem; }
+.note-label {
+  font-family: var(--mono); font-size: .66rem;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint);
+}
+.note-box textarea {
+  font: inherit; font-size: .88rem; line-height: 1.45;
+  width: 100%; max-width: 46rem; min-height: 3.2rem; resize: vertical;
+  padding: .45rem .55rem; border-radius: 4px;
+  border: 1px solid var(--rule-strong);
+  background: var(--ground); color: var(--ink);
+}
+.note-box textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.standing-line { font-size: .78rem; color: var(--ink-faint); margin-top: .35rem; max-width: 46rem; }
+.standing-line button {
+  font: inherit; color: var(--accent); background: none; border: none;
+  padding: 0; cursor: pointer; text-decoration: underline;
+}
 
 /* ---------- where this family is kept ---------- */
 

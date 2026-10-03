@@ -20,13 +20,16 @@ test("a real household is planned for the week in front of it", async () => {
   await app.handle("/api/household/create", DRAFT);
   const state: any = (await app.handle("/api/state")).body;
 
+  // Thursday 3 September: the next week starts on Monday the 7th, which is
+  // the day a family shops for. It used to be "tomorrow", which put a
+  // Saturday-evening setup on a week beginning Sunday.
   assert.equal(state.today, "2026-09-03");
-  assert.equal(state.plan.weekStarting, "2026-09-04");
+  assert.equal(state.plan.weekStarting, "2026-09-07");
   assert.deepEqual(
     [...new Set(state.plan.meals.map((m: any) => m.date))].sort(),
-    weekDates("2026-09-04"),
+    weekDates("2026-09-07"),
   );
-  assert.equal(state.household.weekStarting, "2026-09-04");
+  assert.equal(state.household.weekStarting, "2026-09-07");
 });
 
 test("the leftover link survives the move onto real dates", async () => {
