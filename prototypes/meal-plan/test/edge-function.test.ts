@@ -45,6 +45,34 @@ test("the browser cannot choose the model or the answer length", async () => {
   assert.match(source, /MAX_TOKENS_CEILING/);
 });
 
+test("the browser is allowed to send what the page sends", async () => {
+  // A header the page sends but the function does not list is refused by the
+  // browser before the request goes anywhere, and reported only as "Failed to
+  // fetch". That is exactly how the first real call died.
+  const allowed = source.match(/"access-control-allow-headers":\s*"([^"]+)"/)?.[1] ?? "";
+  const page = await readFile(
+    join(fileURLToPath(new URL("..", import.meta.url)), "web/public/app/model.js"),
+    "utf8",
+  );
+  const block = page.match(/headers:\s*\{([^}]*)\}/)?.[1] ?? "";
+  const sent = [...block.matchAll(/^\s*"?([a-z-]+)"?\s*:/gim)].map((m) => m[1].toLowerCase());
+  assert.ok(sent.length > 0, "could not find the headers model.js sends");
+  for (const header of sent) {
+    assert.ok(
+      allowed.split(",").map((h) => h.trim()).includes(header),
+      `model.js sends "${header}", which the function does not allow`,
+    );
+  }
+});
+
+test("a slow plan ends in a sentence, not a silent cut-off", async () => {
+  // Supabase kills a free-tier function at 150s with no CORS headers, which a
+  // browser reports as "Failed to fetch". The function must give up first.
+  assert.match(source, /AbortController/);
+  const deadline = Number(source.match(/PLAN_DEADLINE_MS"\) \?\? ([\d_]+)/)?.[1].replace(/_/g, ""));
+  assert.ok(deadline > 0 && deadline < 150_000, `deadline is ${deadline}ms`);
+});
+
 test("the key never leaves the function", async () => {
   const key = /ANTHROPIC_API_KEY/g;
   const uses = source.match(key) ?? [];

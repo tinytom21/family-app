@@ -42,6 +42,16 @@ const MAX_TOKENS_CEILING = 32000;
 const MAX_BODY_BYTES = 400_000;
 
 const DAILY_CALLS = Number(Deno.env.get("PLAN_DAILY_CALLS") ?? 20);
+
+/**
+ * Stop just before Supabase does.
+ *
+ * A free-tier function is killed at 150 seconds, and the platform's reply has
+ * no CORS headers, so a browser can only report it as "Failed to fetch" —
+ * indistinguishable from a configuration fault. Giving up ten seconds early
+ * means the page gets a sentence it can show instead.
+ */
+const DEADLINE_MS = Number(Deno.env.get("PLAN_DEADLINE_MS") ?? 140_000);
 const FORCED_MODEL = Deno.env.get("PLAN_MODEL")?.trim();
 
 /* The published site and a laptop are different origins, so this is a
@@ -59,7 +69,10 @@ function corsHeaders(origin: string | null): Record<string, string> {
   if (!origin || !ORIGINS.includes(origin)) return {};
   return {
     "access-control-allow-origin": origin,
-    "access-control-allow-headers": "authorization, content-type",
+    // Including the two Supabase's own clients send, so any of them can call
+    // this without the browser refusing at the permission check — which it
+    // reports, unhelpfully, as nothing more than "Failed to fetch".
+    "access-control-allow-headers": "authorization, content-type, apikey, x-client-info",
     "access-control-allow-methods": "POST, OPTIONS",
     "access-control-expose-headers": "x-plan-calls-today, x-plan-daily-cap, x-plan-model",
     "vary": "origin",
@@ -218,6 +231,9 @@ Deno.serve(async (req) => {
   /* ---- and only now, the model ---- */
 
   let answer: Response;
+  let text: string;
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), DEADLINE_MS);
   try {
     answer = await fetch(ANTHROPIC_URL, {
       method: "POST",
@@ -228,12 +244,29 @@ Deno.serve(async (req) => {
         "anthropic-beta": ANTHROPIC_BETAS,
       },
       body: JSON.stringify(checked.request),
+      signal: deadline.signal,
     });
+    text = await answer.text();
   } catch (error) {
+    if (deadline.signal.aborted) {
+      // 408 rather than 504 on purpose: the app retries a 5xx as "busy", and
+      // retrying something that has just used up the whole time limit would
+      // only spend it twice.
+      return reply(
+        {
+          error:
+            `The plan took longer than ${Math.round(DEADLINE_MS / 1000)} seconds, which is as long ` +
+            `as this server allows. A faster model fixes it: set PLAN_MODEL to claude-sonnet-5.`,
+        },
+        408,
+        origin,
+        counters,
+      );
+    }
     return reply({ error: `Could not reach the model: ${error}` }, 502, origin, counters);
+  } finally {
+    clearTimeout(timer);
   }
-
-  const text = await answer.text();
   if (!answer.ok) {
     // Passed through with its own status, because the app already knows how to
     // read "busy", "out of credit" and "rejected key" differently.

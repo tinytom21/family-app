@@ -75,10 +75,14 @@ export async function call(request) {
 
   const response = await fetch(`${config.url}/functions/v1/plan`, {
     method: "POST",
+    // Two headers, deliberately. Every extra header is one more the browser
+    // must ask the function's permission for before sending anything, and an
+    // `apikey` the function did not list was refused in exactly that way: the
+    // request never left the page, and all anybody saw was "Failed to fetch".
+    // Supabase checks the token in `authorization`; it does not need the key.
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
-      apikey: config.key,
     },
     body: JSON.stringify({ householdId, request }),
   });
