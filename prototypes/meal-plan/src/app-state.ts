@@ -51,6 +51,8 @@ import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
 import { nextStartOn, redatePlan, todayIn, weekdayIndex } from "./domain/week.ts";
+import { dayMessage, ingredientLines, weekMessage } from "./domain/share.ts";
+import type { ShareInput } from "./domain/share.ts";
 import { linksFor, searchTermFor } from "./domain/retailers.ts";
 import {
   CONFIDENT,
@@ -261,6 +263,18 @@ export function createApp(
       },
     });
 
+  /** What the WhatsApp message is written from: the plan and the week's table. */
+  const shareInput = (): ShareInput => ({
+    householdName: state.household.name,
+    plan: state.plan,
+    days: currentWeek().map((day) => ({
+      date: day.date,
+      cookName: day.cookName,
+      away: day.attendance.filter((a) => !a.present).map((a) => a.name),
+    })),
+    weekNote: weekNote(),
+  });
+
   /** This week's notes, for whichever week the plan is currently on. */
   const weekNote = (): string =>
     (state.weekNotes ?? {})[state.plan.weekStarting]?.trim() ?? "";
@@ -401,6 +415,10 @@ export function createApp(
             minutes: recipe ? recipe.prepMinutes + recipe.cookMinutes : null,
             protein: recipe?.protein ?? null,
             steps: recipe?.steps ?? [],
+            // Scaled to tonight's portions by the same code that writes the
+            // WhatsApp message, so the screen and the chat never disagree.
+            ingredients:
+              recipe && !meal.leftoverOf ? ingredientLines(recipe, meal.servings) : [],
             sitting: weekByDate.get(meal.date) ?? null,
           };
         }),
@@ -694,6 +712,17 @@ export function createApp(
 
       /* The whole household as one document, for syncing to an account. Both
          hosts expose it the same way so the account code has one path. */
+      /* The week, and one day of it, as WhatsApp messages. Read-only: these
+         describe the plan and change nothing. */
+      case "/api/share/week":
+        return { status: 200, body: { text: weekMessage(shareInput()) } };
+
+      case "/api/share/day": {
+        const text = dayMessage(shareInput(), String(body.date ?? ""));
+        if (!text) return bad(404, "That day is not in this week's plan.");
+        return { status: 200, body: { text } };
+      }
+
       case "/api/snapshot":
         return { status: 200, body: snapshot() };
 

@@ -144,7 +144,16 @@
     <div class="column-head">
       <h2 id="h-week">Meals</h2>
       <span id="week-source" class="tag"></span>
+      <button type="button" id="share-week" class="btn btn-small">Share week</button>
     </div>
+    <dialog id="share-dialog" class="share-dialog" aria-labelledby="h-share">
+      <h2 id="h-share">Copy this into WhatsApp</h2>
+      <textarea id="share-text" rows="14" readonly></textarea>
+      <div class="share-actions">
+        <button type="button" id="share-copy" class="btn btn-primary">Copy</button>
+        <button type="button" id="share-close" class="btn">Close</button>
+      </div>
+    </dialog>
     <ol id="week" class="week"></ol>
     <div id="validation" class="validation"></div>
   </section>

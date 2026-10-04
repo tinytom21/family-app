@@ -68,7 +68,40 @@ const READS_ONLY = new Set([
   "/api/basket/fill",
   "/api/basket/checkout",
   "/api/basket/signin",
+  "/api/share/week",
+  "/api/share/day",
 ]);
+
+/**
+ * Get a message into WhatsApp by whichever road this device has.
+ *
+ * A phone has a share sheet, and WhatsApp is in it. A computer's share
+ * dialog is a lottery, so there it goes on the clipboard for pasting into
+ * WhatsApp on the web or the desktop app. If even the clipboard refuses, the
+ * text is shown, selected, ready to copy by hand — a share button that can
+ * fail silently is worse than none.
+ */
+async function shareText(text) {
+  const phone = matchMedia("(pointer: coarse)").matches;
+  if (phone && navigator.share) {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return; // they changed their mind
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus("Copied. Paste it into WhatsApp.");
+    return;
+  } catch {
+    /* fall through to showing it */
+  }
+  $("share-text").value = text;
+  $("share-dialog").showModal();
+  $("share-text").select();
+}
 
 /* Everything the screen does goes through here, which makes it the one place
    that knows a change has happened — and so the one place that has to
@@ -323,6 +356,33 @@ function renderWeek(state) {
       }
       row.append(line);
     }
+
+    // The method, folded away until somebody is standing at the hob with it.
+    if (meal.ingredients?.length || meal.steps?.length) {
+      const method = el("details", "day-method");
+      method.append(el("summary", null, "Ingredients and method"));
+      if (meal.ingredients.length) {
+        const items = el("ul", "method-ingredients");
+        for (const line of meal.ingredients) items.append(el("li", null, line));
+        method.append(items);
+      }
+      if (meal.steps.length) {
+        const steps = el("ol", "method-steps");
+        for (const step of meal.steps) steps.append(el("li", null, step));
+        method.append(steps);
+      }
+      row.append(method);
+    }
+
+    const share = el("button", "day-share", "Share day");
+    share.type = "button";
+    share.title = "Send this evening's dinner and method to WhatsApp";
+    share.addEventListener("click", async () => {
+      const { text } = await api.post("/api/share/day", { date: meal.date });
+      await shareText(text);
+    });
+    row.append(share);
+
     list.append(row);
   }
 
@@ -1146,6 +1206,23 @@ $("restock").addEventListener("change", (event) =>
   call("/api/options", { restockStaples: event.target.checked }),
 );
 $("replan").addEventListener("click", () => call("/api/plan/generate"));
+
+$("share-week").addEventListener("click", async () => {
+  const { text } = await api.post("/api/share/week", {});
+  await shareText(text);
+});
+$("share-copy").addEventListener("click", async () => {
+  $("share-text").select();
+  try {
+    await navigator.clipboard.writeText($("share-text").value);
+    setStatus("Copied. Paste it into WhatsApp.");
+    $("share-dialog").close();
+  } catch {
+    // Selected, at least: Ctrl+C does the rest.
+    setStatus("Press Ctrl+C to copy, then paste into WhatsApp.");
+  }
+});
+$("share-close").addEventListener("click", () => $("share-dialog").close());
 
 /* The week's start date. Changing it moves the plan onto the new days and
    remembers the weekday, so it is a one-off for most families. */
