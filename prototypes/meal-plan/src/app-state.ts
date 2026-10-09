@@ -49,7 +49,7 @@ import {
 } from "./domain/people.ts";
 import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
-import type { SittingOverrides } from "./domain/sitting.ts";
+import type { SittingOverrides, UsualWeek } from "./domain/sitting.ts";
 import { nextStartOn, redatePlan, todayIn, weekdayIndex } from "./domain/week.ts";
 import { dayMessage, ingredientLines, weekMessage, weekMessages } from "./domain/share.ts";
 import type { ShareInput } from "./domain/share.ts";
@@ -159,6 +159,8 @@ export interface HouseholdInfo {
   instructions?: string;
   /** 0 = Sunday … 6 = Saturday. The day a planned week begins; Monday if unsaid. */
   weekStartsOn?: number;
+  /** Who usually cooks each weekday, and how long they usually have. */
+  usualWeek?: UsualWeek;
 }
 
 /** The part of the state worth keeping between visits. */
@@ -257,11 +259,33 @@ export function createApp(
       eventsByPerson: state.eventsByPerson,
       connected: state.connected,
       overrides: state.overrides,
+      usual: state.household.usualWeek,
       options: {
         maxWeeknightMinutes: CONSTRAINTS.maxWeeknightMinutes,
         maxWeekendMinutes: CONSTRAINTS.maxWeekendMinutes,
       },
     });
+
+  /** The usual week in the family's own day order, with names, for the screen. */
+  const usualSummary = () => {
+    const usual = state.household.usualWeek;
+    if (!usual || Object.keys(usual).length === 0) return null;
+    const start = state.household.weekStartsOn ?? 1;
+    return Array.from({ length: 7 }, (_, i) => (start + i) % 7)
+      .filter((weekday) => usual[weekday] !== undefined)
+      .map((weekday) => {
+        const day = usual[weekday]!;
+        return {
+          weekday,
+          day: WEEKDAY_NAMES[weekday],
+          cookName:
+            day.cookId === null
+              ? null
+              : (state.people.find((p) => p.id === day.cookId)?.name ?? "someone no longer here"),
+          minutes: day.minutes,
+        };
+      });
+  };
 
   /** What the WhatsApp message is written from: the plan and the week's table. */
   const shareInput = (): ShareInput => ({
@@ -382,6 +406,7 @@ export function createApp(
         portions: householdPortions(state.people),
         instructions: state.household.instructions ?? "",
         weekStartsOn: state.household.weekStartsOn ?? 1,
+        usualWeek: usualSummary(),
         weekStarting: state.plan.weekStarting,
         maxWeeknightMinutes: CONSTRAINTS.maxWeeknightMinutes,
         maxWeekendMinutes: CONSTRAINTS.maxWeekendMinutes,
@@ -788,6 +813,37 @@ export function createApp(
         state.weekNotes = notes;
         state.plan = redatePlan(state.plan, date);
         state.household = { ...state.household, weekStartsOn: weekdayIndex(date) };
+        return ok();
+      }
+
+      /* Keep this week's cooks and times as the family's usual week.
+
+         Taken from the table exactly as it stands — calendar, guesses and
+         corrections alike — because that is what the person pressing the
+         button is looking at, and "save what I can see" is the only rule
+         nobody has to have explained. */
+      case "/api/week/save-usual": {
+        const usual: UsualWeek = {};
+        for (const day of currentWeek()) {
+          usual[weekdayIndex(day.date)] = { cookId: day.cookId, minutes: day.cookMinutes };
+        }
+        state.household = { ...state.household, usualWeek: usual };
+
+        // This week's corrections to cook and time are now simply the usual,
+        // so they stop being corrections. Who is in for dinner is a different
+        // question and stays exactly as it was.
+        const dates = new Set(planDates(state.plan));
+        state.overrides = {
+          ...state.overrides,
+          cook: withoutDates(state.overrides.cook, dates),
+          minutes: withoutDates(state.overrides.minutes, dates),
+        };
+        return ok();
+      }
+
+      case "/api/week/forget-usual": {
+        const { usualWeek: _gone, ...household } = state.household;
+        state.household = household;
         return ok();
       }
 
@@ -1220,3 +1276,14 @@ const message = (error: unknown): string =>
  */
 const cleanText = (value: unknown): string =>
   typeof value === "string" ? value.trim().slice(0, 2000) : "";
+
+const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** A by-date record without the given dates. */
+function withoutDates<T>(
+  record: Record<string, T> | undefined,
+  dates: ReadonlySet<string>,
+): Record<string, T> | undefined {
+  if (!record) return record;
+  return Object.fromEntries(Object.entries(record).filter(([date]) => !dates.has(date)));
+}

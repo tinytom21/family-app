@@ -350,6 +350,16 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .chip.calendar { background: var(--accent-soft); color: var(--accent); }
 .chip.assumed  { background: var(--surface-alt); color: var(--ink-soft); }
 .chip.override { background: var(--open-soft); color: var(--open); }
+.chip.usual {
+  background: transparent; color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* the usual week: an outline rather than a fill, so it reads as "the default"
+   next to the calendar's evidence and a person's correction */
+.grid-cell.usual { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+
+.usual-week { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .8rem; }
+.usual-line { flex: 1 1 100%; font-size: .8rem; color: var(--ink-soft); max-width: 52rem; }
 .chip.portion  { background: var(--surface-alt); color: var(--ink-soft); }
 
 /* account */

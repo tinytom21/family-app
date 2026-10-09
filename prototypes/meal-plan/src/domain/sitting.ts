@@ -24,10 +24,32 @@
 import { assessDay, dayIntervals } from "./agenda.ts";
 import type { CalendarEvent } from "./agenda.ts";
 import { portionFor } from "./people.ts";
+import { weekdayIndex } from "./week.ts";
 import type { Person } from "./people.ts";
 
 /** Where a cell's value came from, so the UI can show its working. */
-export type CellSource = "calendar" | "assumed" | "override";
+/**
+ * Where a cell's value came from, weakest first: a guess, the family's usual
+ * week, this week's diary, and finally somebody saying so for this week.
+ */
+export type CellSource = "calendar" | "assumed" | "usual" | "override";
+
+/** One weekday of the family's usual week. */
+export interface UsualDay {
+  /** Who normally cooks; null for "nobody — leftovers or the freezer". */
+  readonly cookId: string | null;
+  /** How long they normally have, prep and cook together. */
+  readonly minutes: number;
+}
+
+/**
+ * The week as it usually goes, keyed by weekday (0 = Sunday … 6 = Saturday).
+ *
+ * It replaces the guess, not the facts. A diary that says the usual cook is
+ * out, or has less time than usual tonight, is about this week and wins; so
+ * does anybody correcting this week by hand.
+ */
+export type UsualWeek = Partial<Record<number, UsualDay>>;
 
 export interface Attendance {
   readonly personId: string;
@@ -211,6 +233,8 @@ export interface ProposeInput {
   readonly connected?: readonly string[];
   readonly overrides?: SittingOverrides;
   readonly options?: SittingOptions;
+  /** The family's standard week, if they have saved one. */
+  readonly usual?: UsualWeek;
 }
 
 /**
@@ -281,18 +305,48 @@ export function proposeWeek(input: ProposeInput): DaySitting[] {
         null,
       ) ?? null;
 
+    /* ---- the usual week, where there is one ---- */
+    const usual = input.usual?.[weekdayIndex(date)];
+    const usualCook =
+      usual?.cookId != null
+        ? attendance.find((a) => a.personId === usual.cookId) ?? null
+        : null;
+    // The usual cook only counts if they are here tonight and still a cook.
+    const usualHolds =
+      usual !== undefined &&
+      (usual.cookId === null || Boolean(usualCook?.present && usualCook.canCook));
+
     const cookOverride = overrides.cook?.[date];
     const cookId =
-      cookOverride !== undefined ? cookOverride : (proposedCook?.personId ?? null);
+      cookOverride !== undefined
+        ? cookOverride
+        : usualHolds
+          ? usual!.cookId
+          : (proposedCook?.personId ?? null);
     const cook = attendance.find((a) => a.personId === cookId) ?? null;
+    const byUsual = cookOverride === undefined && usualHolds;
 
     const ceiling = isWeekendDate(date)
       ? o.maxWeekendMinutes
       : o.maxWeeknightMinutes;
-    const proposedMinutes = cook ? Math.min(ceiling, cook.freeMinutes) : 0;
+    let proposedMinutes = cook ? Math.min(ceiling, cook.freeMinutes) : 0;
+    let proposedSource: CellSource = cook ? cook.source : "assumed";
+    if (byUsual && cook) {
+      // The usual time, unless this week's diary says there is less of it.
+      const diaryShort = cook.source === "calendar" && cook.freeMinutes < usual!.minutes;
+      proposedMinutes = diaryShort ? cook.freeMinutes : usual!.minutes;
+      proposedSource = diaryShort ? "calendar" : "usual";
+    }
     const minutesOverride = overrides.minutes?.[date];
     const cookMinutes =
       minutesOverride !== undefined ? minutesOverride : proposedMinutes;
+
+    // Said out loud when the usual plan could not happen, so a different name
+    // in the cooking row is explained rather than looking like a mistake.
+    const aside =
+      cookOverride === undefined && usual?.cookId && !usualHolds && usualCook
+        ? `${usualCook.name} usually cooks, but is ${usualCook.present ? "not able to tonight" : "out"}`
+        : "";
 
     return {
       date,
@@ -300,11 +354,17 @@ export function proposeWeek(input: ProposeInput): DaySitting[] {
       cookId: cook ? cook.personId : null,
       cookName: cook ? cook.name : null,
       cookMinutes,
-      cookSource: cookOverride !== undefined ? "override" : cook ? cook.source : "assumed",
-      minutesSource:
-        minutesOverride !== undefined ? "override" : cook ? cook.source : "assumed",
+      cookSource:
+        cookOverride !== undefined
+          ? "override"
+          : byUsual
+            ? "usual"
+            : cook
+              ? cook.source
+              : "assumed",
+      minutesSource: minutesOverride !== undefined ? "override" : proposedSource,
       portions: round(attendance.reduce((sum, a) => sum + a.portion, 0)),
-      note: describe(attendance, cook, cookMinutes),
+      note: describe(attendance, cook, cookMinutes, aside),
     };
   });
 }
@@ -315,11 +375,13 @@ function describe(
   attendance: readonly Attendance[],
   cook: Attendance | null,
   cookMinutes: number,
+  aside = "",
 ): string {
   const out = attendance.filter((a) => !a.present);
   const bits: string[] = [];
 
   if (out.length === attendance.length) return "Nobody in for dinner.";
+  if (aside) bits.push(aside);
   if (out.length) {
     bits.push(`${out.map((a) => a.name).join(" and ")} out`);
   }

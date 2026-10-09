@@ -280,6 +280,55 @@ function render(state) {
 }
 
 /**
+ * The family's usual week: who normally cooks each day, and for how long.
+ *
+ * Saved from the table rather than typed into a second, separate form — the
+ * table is already the place where a week is set the way it goes, so "make
+ * this the usual" is one button, not a duplicate of everything above it.
+ */
+function renderUsualWeek(state) {
+  const box = $("usual-week");
+  box.replaceChildren();
+  const saved = state.household.usualWeek;
+
+  const save = async () => {
+    const done = await call("/api/week/save-usual");
+    if (done) {
+      setStatus(
+        "Saved as your usual week. Every new week starts from it; the calendar and changes to a particular week still win.",
+      );
+    }
+  };
+
+  if (!saved) {
+    box.append(
+      el(
+        "p",
+        "usual-line",
+        "Set the cooking and times the way a normal week goes, then save it. Every new week will start from it.",
+      ),
+      button("Save as our usual week", false, save),
+    );
+    return;
+  }
+
+  const summary = saved
+    .map((d) => (d.cookName ? `${d.day} ${d.cookName} ${d.minutes} min` : `${d.day} no cooking`))
+    .join(" · ");
+  const forget = el("button", "btn btn-quiet", "Stop using it");
+  forget.type = "button";
+  forget.addEventListener("click", async () => {
+    const done = await call("/api/week/forget-usual");
+    if (done) setStatus("Usual week removed. New weeks are worked out from the calendars again.");
+  });
+  box.append(
+    el("p", "usual-line", `Usual week: ${summary}`),
+    button("Update it from this week", false, save),
+    forget,
+  );
+}
+
+/**
  * The start date and the family's own words.
  *
  * None of these is redrawn while somebody is typing in it: a save from another
@@ -307,6 +356,8 @@ function renderWeekWords(state) {
     });
     line.append(`Every week: ${standing} (`, change, ")");
   }
+
+  renderUsualWeek(state);
 
   // A plan for a week that is already over is a plan nobody will cook.
   const last = state.plan.meals.map((m) => m.date).sort().at(-1);
