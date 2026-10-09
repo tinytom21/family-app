@@ -86,21 +86,75 @@ async function shareText(text) {
   if (phone && navigator.share) {
     try {
       await navigator.share({ text });
-      return;
+      return true;
     } catch (error) {
-      if (error?.name === "AbortError") return; // they changed their mind
+      if (error?.name === "AbortError") return false; // they changed their mind
     }
   }
   try {
     await navigator.clipboard.writeText(text);
     setStatus("Copied. Paste it into WhatsApp.");
-    return;
+    return true;
   } catch {
     /* fall through to showing it */
   }
+  // Shown for copying by hand. If the parts list is already open this joins
+  // it underneath, rather than replacing the list somebody is halfway down.
   $("share-text").value = text;
-  $("share-dialog").showModal();
+  $("share-text").hidden = false;
+  $("share-copy").hidden = false;
+  if (!$("share-dialog").open) {
+    $("h-share").textContent = "Copy this into WhatsApp";
+    $("share-parts").hidden = true;
+    $("share-dialog").showModal();
+  }
   $("share-text").select();
+  return false;
+}
+
+/**
+ * A week too long for one message: a button per message, in order, each
+ * ticked off once sent.
+ *
+ * A phone's share sheet takes one text at a time, so this cannot be a single
+ * press. It can at least be an obvious, ordered one, where it is plain which
+ * have gone.
+ */
+function shareParts(parts) {
+  const box = $("share-parts");
+  box.replaceChildren(
+    el(
+      "p",
+      "share-hint",
+      "Too long for one WhatsApp message, so it comes in parts, a few days each. Send them in order.",
+    ),
+  );
+  $("h-share").textContent = `This week is ${parts.length} messages`;
+
+  parts.forEach((part, index) => {
+    const days =
+      part.from === part.to
+        ? dayFormat.format(asDate(part.from))
+        : `${dayFormat.format(asDate(part.from))}–${dayFormat.format(asDate(part.to))}`;
+    const label = `${index + 1} of ${parts.length} · ${days}`;
+    const send = el("button", `btn${index === 0 ? " btn-primary" : ""} share-part`, `Send ${label}`);
+    send.type = "button";
+    send.addEventListener("click", async () => {
+      if (await shareText(part.text)) {
+        send.classList.add("sent");
+        send.classList.remove("btn-primary");
+        send.textContent = `✓ Sent ${label}`;
+        // The next one becomes the obvious next press.
+        box.querySelectorAll(".share-part:not(.sent)")[0]?.classList.add("btn-primary");
+      }
+    });
+    box.append(send);
+  });
+
+  box.hidden = false;
+  $("share-text").hidden = true;
+  $("share-copy").hidden = true;
+  $("share-dialog").showModal();
 }
 
 /* Everything the screen does goes through here, which makes it the one place
@@ -1208,15 +1262,17 @@ $("restock").addEventListener("change", (event) =>
 $("replan").addEventListener("click", () => call("/api/plan/generate"));
 
 $("share-week").addEventListener("click", async () => {
-  const { text } = await api.post("/api/share/week", {});
-  await shareText(text);
+  const { parts } = await api.post("/api/share/week", {});
+  if (parts.length === 1) await shareText(parts[0].text);
+  else shareParts(parts);
 });
 $("share-copy").addEventListener("click", async () => {
   $("share-text").select();
   try {
     await navigator.clipboard.writeText($("share-text").value);
     setStatus("Copied. Paste it into WhatsApp.");
-    $("share-dialog").close();
+    // Halfway down a list of parts, the list must stay; on its own, close.
+    if ($("share-parts").hidden) $("share-dialog").close();
   } catch {
     // Selected, at least: Ctrl+C does the rest.
     setStatus("Press Ctrl+C to copy, then paste into WhatsApp.");

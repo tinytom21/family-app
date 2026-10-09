@@ -51,7 +51,7 @@ import type { Person } from "./domain/people.ts";
 import { proposeWeek, slotsFromWeek } from "./domain/sitting.ts";
 import type { SittingOverrides } from "./domain/sitting.ts";
 import { nextStartOn, redatePlan, todayIn, weekdayIndex } from "./domain/week.ts";
-import { dayMessage, ingredientLines, weekMessage } from "./domain/share.ts";
+import { dayMessage, ingredientLines, weekMessage, weekMessages } from "./domain/share.ts";
 import type { ShareInput } from "./domain/share.ts";
 import { linksFor, searchTermFor } from "./domain/retailers.ts";
 import {
@@ -714,8 +714,15 @@ export function createApp(
          hosts expose it the same way so the account code has one path. */
       /* The week, and one day of it, as WhatsApp messages. Read-only: these
          describe the plan and change nothing. */
-      case "/api/share/week":
-        return { status: 200, body: { text: weekMessage(shareInput()) } };
+      case "/api/share/week": {
+        const input = shareInput();
+        // `parts` is what to send: one message when the week fits, several
+        // when it does not. `text` stays as the whole, unsplit week.
+        return {
+          status: 200,
+          body: { text: weekMessage(input), parts: weekMessages(input) },
+        };
+      }
 
       case "/api/share/day": {
         const text = dayMessage(shareInput(), String(body.date ?? ""));

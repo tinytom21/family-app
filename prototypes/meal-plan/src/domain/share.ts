@@ -111,22 +111,124 @@ export function dayCards(input: ShareInput): DayCard[] {
 
 export function weekMessage(input: ShareInput): string {
   const cards = dayCards(input);
+  return [weekHead(input, cards, null), ...cards.map(dayChunk)].join("\n\n").trim();
+}
+
+/**
+ * The largest single message, in characters.
+ *
+ * WhatsApp's documented ceiling is far higher, but long texts handed over by
+ * a phone's share sheet have been refused well below it, and a week of real
+ * recipes outgrew one message in practice. 4,000 sits under every limit we
+ * know of — including the 4,096 WhatsApp sets for business messages — with
+ * room for the "2 of 3" label.
+ */
+export const MESSAGE_LIMIT = 4000;
+
+export interface MessagePart {
+  readonly text: string;
+  /** First and last day this part covers, for the button that sends it. */
+  readonly from: string | null;
+  readonly to: string | null;
+}
+
+/**
+ * The week, as one message if it fits and as several if it does not.
+ *
+ * Whole days only: a recipe split across two messages is a recipe somebody
+ * has to scroll between with floury hands. The menu always goes first, so
+ * whoever receives only the first message still knows what is for dinner.
+ */
+export function weekMessages(input: ShareInput, limit = MESSAGE_LIMIT): MessagePart[] {
+  const cards = dayCards(input);
+  const whole = weekMessage(input);
+  if (whole.length <= limit) {
+    return [{ text: whole, from: cards[0]?.date ?? null, to: cards.at(-1)?.date ?? null }];
+  }
+
+  // Pack greedily, leaving room for the label added once the count is known.
+  const room = limit - 60;
+  const packs: { cards: DayCard[]; chunks: string[] }[] = [];
+  let current = { cards: [] as DayCard[], chunks: [] as string[] };
+  let size = weekHead(input, cards, null).length;
+
+  for (const card of cards) {
+    // An oversized day starts by filling what is left of the current
+    // message, menu and all, rather than assuming it has a message to itself.
+    for (const chunk of fitted(dayChunk(card), room - size - 2, room)) {
+      if (current.chunks.length && size + 2 + chunk.length > room) {
+        packs.push(current);
+        current = { cards: [], chunks: [] };
+        size = 0;
+      }
+      current.chunks.push(chunk);
+      if (!current.cards.includes(card)) current.cards.push(card);
+      size += 2 + chunk.length;
+    }
+  }
+  if (current.chunks.length) packs.push(current);
+
+  const total = packs.length;
+  return packs.map((pack, index) => {
+    const label = `${index + 1} of ${total}`;
+    const head =
+      index === 0
+        ? weekHead(input, cards, label)
+        : `*${householdLabel(input)} · week of ${dayLabel(cards[0].date)}* (${label})`;
+    return {
+      text: [head, ...pack.chunks].join("\n\n").trim(),
+      from: pack.cards[0]?.date ?? null,
+      to: pack.cards.at(-1)?.date ?? null,
+    };
+  });
+}
+
+function householdLabel(input: ShareInput): string {
+  return clean(input.householdName) || "Our week";
+}
+
+/** The title, the seven-line menu, and this week's notes. */
+function weekHead(input: ShareInput, cards: readonly DayCard[], label: string | null): string {
   const first = cards[0]?.date ?? input.plan.weekStarting;
-  const out: string[] = [
-    `*${clean(input.householdName) || "Our week"} · week of ${dayLabel(first)}*`,
+  const out = [
+    `*${householdLabel(input)} · week of ${dayLabel(first)}*${label ? ` (${label})` : ""}`,
     "",
     "*Menu*",
     ...cards.map((card) => `${shortDay(card.date)}  ${menuLine(card)}`),
   ];
-
   if (input.weekNote?.trim()) {
     out.push("", `_This week: ${clean(input.weekNote.trim())}_`);
   }
+  return out.join("\n");
+}
 
-  for (const card of cards) {
-    out.push("", "━━━━━━━━━━", ...dayBlock(card));
+function dayChunk(card: DayCard): string {
+  return ["━━━━━━━━━━", ...dayBlock(card)].join("\n");
+}
+
+/**
+ * A single day longer than a whole message — implausible, but a share that
+ * fails outright is worse than one that breaks a recipe at a line. Split at
+ * line ends, never mid-word.
+ */
+function fitted(chunk: string, firstRoom: number, room: number): string[] {
+  if (chunk.length <= room) return [chunk];
+  const out: string[] = [];
+  let piece = "";
+  // Too little left to be worth starting in: begin a fresh message instead.
+  let limit = firstRoom >= 200 ? firstRoom : room;
+  for (const line of chunk.split("\n")) {
+    const next = piece ? `${piece}\n${line}` : line;
+    if (next.length > limit && piece) {
+      out.push(piece);
+      piece = line;
+      limit = room;
+    } else {
+      piece = next;
+    }
   }
-  return out.join("\n").trim();
+  if (piece) out.push(piece);
+  return out;
 }
 
 /** One day, on its own — for "what's for dinner tonight". */

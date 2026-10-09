@@ -927,6 +927,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   background: var(--ground); color: var(--ink); resize: vertical;
 }
 .share-actions { display: flex; gap: .5rem; margin-top: .6rem; }
+.share-parts { display: flex; flex-direction: column; gap: .45rem; margin-bottom: .6rem; }
+.share-hint { font-size: .84rem; color: var(--ink-soft); margin-bottom: .2rem; }
+.share-part { justify-content: flex-start; text-align: left; }
+.share-part.sent { color: var(--ink-faint); border-color: var(--rule); }
 
 /* ---------- where this family is kept ---------- */
 
