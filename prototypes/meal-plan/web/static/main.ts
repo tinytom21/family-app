@@ -60,6 +60,8 @@ const ai: AiHooks = {
       provider: new EdgeProvider(),
       slots: options.slots,
       larderLines: options.larderLines,
+      reuse: options.reuse,
+      current: options.current,
     });
     return {
       plan: run.plan,
@@ -67,6 +69,7 @@ const ai: AiHooks = {
       model: run.model,
       attempts: run.attempts,
       costUsd: run.costUsd,
+      reasoning: run.reasoning,
     };
   },
 

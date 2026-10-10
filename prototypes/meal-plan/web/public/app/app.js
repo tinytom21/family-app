@@ -172,7 +172,9 @@ const api = {
 async function call(path, body) {
   if (busy) return null;
   busy = true;
-  setStatus(path === "/api/plan/generate" ? "Asking the model…" : "Saving…");
+  setStatus(
+    path === "/api/plan/generate" || path === "/api/plan/revise" ? "Asking the model…" : "Saving…",
+  );
   try {
     const data = await api.post(path, body ?? {});
     render(data);
@@ -238,6 +240,8 @@ function syncButtons() {
   $("who").disabled = busy;
   $("grid-reset").disabled = busy;
   $("basket").disabled = busy;
+  $("revise").disabled = busy || !window.__modelAvailable;
+  $("agree").disabled = busy;
 }
 
 /* ------------------------------------------------------------------ */
@@ -261,6 +265,8 @@ function render(state) {
   renderLarder(state);
   renderJobs(state);
   renderCalendarButton(state);
+  renderAgreement(state);
+  renderHistory(state);
 
   $("restock").checked = state.restockStaples;
   $("week-source").textContent =
@@ -277,6 +283,120 @@ function render(state) {
   renderWeekWords(state);
   if (state.household.name) document.title = `The week · ${state.household.name}`;
   syncButtons();
+}
+
+/* ---------------- verdicts and history ---------------- */
+
+/** 👍 and 👎 for one eaten meal. */
+function ratingButtons(meal) {
+  const box = el("span", "day-rate");
+  box.append(el("span", "day-rate-label", meal.rating ? "Your verdict" : "How was it?"));
+  for (const [value, face, word] of [
+    ["up", "👍", "Would have it again"],
+    ["down", "👎", "Not again"],
+  ]) {
+    const chosen = meal.rating === value;
+    const button = el("button", `rate-btn${chosen ? " chosen" : ""}`, face);
+    button.type = "button";
+    button.title = chosen ? `${word} — press again to take it back` : word;
+    button.setAttribute("aria-pressed", String(chosen));
+    button.setAttribute("aria-label", `${word}: ${meal.title}`);
+    button.addEventListener("click", () =>
+      call("/api/meal/rate", {
+        date: meal.date,
+        slot: meal.slot,
+        rating: chosen ? null : value,
+      }),
+    );
+    box.append(button);
+  }
+  return box;
+}
+
+function renderAgreement(state) {
+  $("agree").hidden = state.plan.agreed;
+  $("agreed").hidden = !state.plan.agreed;
+}
+
+/**
+ * The meal log: what is waiting for a verdict, which favourites the next
+ * plan will bring back, what the thumbs suggest, and every dish so far.
+ *
+ * Shown in full so the suggestions are never a mystery — anyone can see why
+ * the traybake is back, and why the fish pie never is.
+ */
+function renderHistory(state) {
+  const h = state.history;
+  const body = $("history-body");
+  body.replaceChildren();
+
+  const waiting = h.toRate.length;
+  $("history").textContent = waiting ? `History · ${waiting} to rate` : "History";
+  $("history-sub").textContent = h.meals
+    ? `${h.meals} meal${h.meals === 1 ? "" : "s"} logged.`
+    : "Nothing logged yet.";
+
+  if (!h.meals) {
+    body.append(
+      el(
+        "p",
+        "account-note",
+        "Agree a week's plan and its meals are logged here. Rate each one after you've eaten it, and future plans bring back what you liked — now and then, not every week — and steer clear of what you didn't.",
+      ),
+    );
+    return;
+  }
+
+  if (waiting) {
+    body.append(el("h3", "subhead", "How were they?"));
+    const list = el("ul", "history-rate");
+    for (const meal of h.toRate) {
+      const row = el("li", "history-rate-row");
+      row.append(
+        el("span", "history-when", `${dayFormat.format(asDate(meal.date))} ${dateFormat.format(asDate(meal.date))}`),
+        el("span", "history-title", meal.title),
+        ratingButtons({ ...meal, rating: null }),
+      );
+      list.append(row);
+    }
+    body.append(list);
+  }
+
+  if (h.comingBack.length) {
+    body.append(el("h3", "subhead", "Coming back in the next plan"));
+    const list = el("ul", "history-lines");
+    for (const dish of h.comingBack) {
+      list.append(el("li", null, `${dish.title} — liked, and last had ${dish.weeksSince} weeks ago`));
+    }
+    body.append(list);
+  }
+
+  if (h.patterns.length) {
+    body.append(el("h3", "subhead", "What the thumbs suggest"));
+    const list = el("ul", "history-lines");
+    for (const line of h.patterns) list.append(el("li", null, line));
+    body.append(list);
+  }
+
+  body.append(el("h3", "subhead", "Every dish"));
+  const wrap = el("div", "scroller");
+  const table = el("table", "history-table");
+  const head = el("tr");
+  for (const label of ["Dish", "👍", "👎", "Had", "Last"]) head.append(el("th", null, label));
+  table.append(head);
+  for (const dish of h.dishes) {
+    const row = el("tr", dish.ups > dish.downs ? "liked" : dish.downs > dish.ups ? "disliked" : "");
+    row.append(
+      el("td", "history-title", dish.title),
+      el("td", "num", String(dish.ups)),
+      el("td", "num", String(dish.downs)),
+      el("td", "num", `${dish.times}×`),
+      el("td", "num", dateFormat.format(asDate(dish.last))),
+    );
+    table.append(row);
+  }
+  wrap.append(table);
+  body.append(wrap);
 }
 
 /**
@@ -461,6 +581,10 @@ function renderWeek(state) {
       }
       row.append(line);
     }
+
+    // A verdict, once the meal has been eaten. Pressing the chosen thumb
+    // again takes it back.
+    if (meal.rateable) row.append(ratingButtons(meal));
 
     // The method, folded away until somebody is standing at the hob with it.
     if (meal.ingredients?.length || meal.steps?.length) {
@@ -1271,6 +1395,39 @@ $("who").addEventListener("click", () => {
   const panel = $("people-panel");
   panel.hidden = !panel.hidden;
   if (!panel.hidden) panel.scrollIntoView({ block: "nearest" });
+});
+$("history").addEventListener("click", () => {
+  const panel = $("history-panel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) panel.scrollIntoView({ block: "nearest" });
+});
+$("history-close").addEventListener("click", () => {
+  $("history-panel").hidden = true;
+});
+
+$("agree").addEventListener("click", async () => {
+  const done = await call("/api/plan/agree");
+  if (done) setStatus("Agreed and logged. Rate each meal after you've eaten it — that's how future plans learn.");
+});
+
+/* Feedback on the plan before agreeing it, written in the week's note box.
+   The box saves when it loses focus — which is exactly what pressing this
+   button makes it do — so this waits for that save, then makes sure the
+   words on screen are the words the revision reads. */
+$("revise").addEventListener("click", async () => {
+  while (busy) await new Promise((resolve) => setTimeout(resolve, 50));
+  const note = $("week-note").value.trim();
+  if (!note) {
+    setStatus("Write what you'd like changed in the box first.", true);
+    $("week-note").focus();
+    return;
+  }
+  await api.post("/api/week/note", { text: note });
+  const done = await call("/api/plan/revise");
+  if (done) {
+    const why = done.lastRun?.reasoning ? ` ${done.lastRun.reasoning}` : "";
+    setStatus(`Revised.${why} Agree the plan when it looks right.`);
+  }
 });
 $("people-close").addEventListener("click", () => {
   $("people-panel").hidden = true;

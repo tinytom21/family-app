@@ -169,6 +169,8 @@ export interface PlanConstraints {
   readonly standing?: string;
   /** What is different about this particular week. Wins over `standing`. */
   readonly thisWeek?: string;
+  /** Past meals and the family's verdicts, already written for the planner. */
+  readonly history?: string;
 }
 
 /* ---------- Shopping list output ---------- */

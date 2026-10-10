@@ -16,7 +16,7 @@ import { peopleForPrompt, portionFor } from "../domain/people.ts";
 import { planResponseSchema } from "./schema.ts";
 import { validatePlan, isWeekend } from "../validate.ts";
 import type { ValidationResult, Violation } from "../validate.ts";
-import type { MealPlan, PlanConstraints } from "../domain/types.ts";
+import type { MealPlan, PlanConstraints, Recipe } from "../domain/types.ts";
 /* From `provider.ts`, not `providers.ts`: the interface, not the SDKs. This
    module is bundled into the hosted build, which is allowed to contain no
    model SDK and no key at all, so the caller brings the provider. */
@@ -154,7 +154,33 @@ function familySection(c: PlanConstraints): string {
     );
   }
   if (c.notes) parts.push(`FROM THE FAMILY\n${c.notes}`);
+  if (c.history) parts.push(c.history);
   return parts.length ? `\n${parts.join("\n\n")}` : "";
+}
+
+/**
+ * The plan as it stands, for a revision rather than a fresh start.
+ *
+ * Kept meals are referenced by recipeId and not written out again: the model
+ * cannot accidentally "improve" a recipe nobody asked it to touch, and a
+ * revision that changes one evening costs one evening's tokens.
+ */
+function currentPlanSection(plan: MealPlan): string {
+  const recipes = new Map(plan.recipes.map((r) => [r.id, r]));
+  const lines = [...plan.meals]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((m) => {
+      const recipe = recipes.get(m.recipeId);
+      const what = m.leftoverOf
+        ? `leftovers of ${m.leftoverOf}`
+        : `${recipe?.title ?? m.recipeId}, ${recipe ? recipe.prepMinutes + recipe.cookMinutes : "?"} min`;
+      return `- ${m.date} (${dayName(m.date)}) ${m.slot}: recipeId ${m.recipeId} — ${what}, servings ${m.servings}`;
+    });
+  return `
+
+THE PLAN AS IT STANDS — revise it; do not start again
+The family has read this plan, and their notes under THIS WEEK ONLY say what they want changed. Change what the notes ask for, and anything that has to change because of it — a leftover night whose cook has moved, say. Keep every other meal exactly as it is: the same day, slot, recipeId and servings, and do not define those recipes again — they are kept as they are. Say in "reasoning" what you changed and why, in a sentence or two, for the family to read.
+${lines.join("\n")}`;
 }
 
 /**
@@ -250,6 +276,10 @@ export async function generatePlan(
     larderLines?: readonly string[];
     maxRepairs?: number;
     onProgress?: (message: string) => void;
+    /** Favourites to bring back exactly as they were, under their own ids. */
+    reuse?: readonly Recipe[];
+    /** Revise this plan rather than start a fresh one. */
+    current?: MealPlan;
   },
 ): Promise<PlanRun> {
   const provider = options.provider;
@@ -265,9 +295,18 @@ export async function generatePlan(
   const turns: Turn[] = [
     {
       role: "user",
-      text: userPrompt(constraints, slots, options.larderLines),
+      text:
+        userPrompt(constraints, slots, options.larderLines) +
+        (options.current ? currentPlanSection(options.current) : ""),
     },
   ];
+
+  // Recipes the model may refer to by id without writing out: favourites
+  // coming back, and on a revision, every meal it was told to keep.
+  const keepable = new Map<string, Recipe>();
+  for (const recipe of [...(options.reuse ?? []), ...(options.current?.recipes ?? [])]) {
+    if (!keepable.has(recipe.id)) keepable.set(recipe.id, recipe);
+  }
 
   let best:
     | { plan: MealPlan; reasoning: string; validation: ValidationResult }
@@ -285,13 +324,20 @@ export async function generatePlan(
       meals: MealPlan["meals"];
     };
 
+    // Fill in the recipes it was allowed to refer to without defining. One it
+    // did define wins: that is the model deliberately changing it.
+    const defined = new Set(parsed.recipes.map((r) => r.id));
+    const kept = [...new Set(parsed.meals.map((m) => m.recipeId))]
+      .filter((id) => !defined.has(id) && keepable.has(id))
+      .map((id) => keepable.get(id)!);
+
     const plan: MealPlan = {
       weekStarting: constraints.weekStarting,
       meals: parsed.meals.map((m) => ({
         ...m,
         leftoverOf: m.leftoverOf ?? undefined,
       })),
-      recipes: parsed.recipes,
+      recipes: [...parsed.recipes, ...kept],
     };
 
     const validation = validatePlan(plan, constraints, slots);

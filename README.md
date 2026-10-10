@@ -267,6 +267,23 @@ The cooking limit belongs to the *person cooking*, not the evening. And a day
 where nobody is free to cook is a real answer — the planner is told to use
 leftovers or the freezer rather than just something faster.
 
+**Agreeing, revising and rating.** A plan is a draft until somebody presses
+**Agree this plan**. Before that, anything you would like changed goes in the
+week's note box, and **Revise the plan with this note** changes only what the
+note asks for, keeping every other evening exactly as it was. **Replan with
+AI** starts again. Once a meal has been eaten it gets a 👍 or 👎, and the
+**History** panel lists anything from the past few weeks still waiting for a
+verdict.
+
+Every agreed meal is logged, with its rating and its recipe, and each new plan
+is told what the log says. It avoids dishes the family disliked and anything
+had in the last fortnight, and brings a favourite back now and then, as the
+same recipe rather than a reinvention. A favourite rests three weeks after the
+first time, up to six for an old regular, and never more than two come back in
+one week. A planner that serves only what is already liked stops finding new
+things to like. Once there are enough ratings it also passes on patterns, such
+as "chicken liked 6 of 6, fish 1 of 4", as leanings to weigh rather than rules.
+
 **Connect calendar** attaches a Google Calendar to one profile, matched by the
 signed-in email address. Run `/check-google.html` once first — it sets up the
 Supabase details this page then reuses.

@@ -64,6 +64,8 @@ const ai: AiHooks = {
         provider,
         slots: options.slots,
         larderLines: options.larderLines,
+        reuse: options.reuse,
+        current: options.current,
       }),
     );
     return {
@@ -72,6 +74,7 @@ const ai: AiHooks = {
       model: run.model,
       attempts: run.attempts,
       costUsd: run.costUsd,
+      reasoning: run.reasoning,
     };
   },
 

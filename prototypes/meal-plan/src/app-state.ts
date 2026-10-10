@@ -82,7 +82,19 @@ import {
   PEOPLE,
   TODAY,
 } from "./demo-data.ts";
-import type { MealPlan, PlanConstraints } from "./domain/types.ts";
+import type { MealPlan, MealSlot, PlanConstraints, Recipe } from "./domain/types.ts";
+import {
+  chooseRepeats,
+  dishKey,
+  dishStats,
+  emptyLog,
+  historyForPrompt,
+  patterns,
+  rateMeal,
+  recordWeek,
+  repeatId,
+} from "./domain/history.ts";
+import type { MealLog, Rating } from "./domain/history.ts";
 
 /* ------------------------------------------------------------------ */
 
@@ -92,6 +104,8 @@ export interface PlanRunSummary {
   readonly model: string;
   readonly attempts: number;
   readonly costUsd: number;
+  /** The model's own two sentences — on a revision, what it changed and why. */
+  readonly reasoning?: string;
 }
 
 export interface CaptureRunSummary {
@@ -115,6 +129,10 @@ export interface AiHooks {
     options: {
       slots: readonly { date: string; slot: string }[];
       larderLines: readonly string[];
+      /** Favourites to bring back as they were. */
+      reuse?: readonly Recipe[];
+      /** Revise this plan rather than replace it. */
+      current?: MealPlan;
     },
   ): Promise<PlanRunSummary>;
   captureTasks?(
@@ -184,6 +202,10 @@ export interface Snapshot {
    * apply forever. Optional because households saved before it existed lack it.
    */
   weekNotes?: Record<string, string>;
+  /** Every agreed meal and the family's thumbs on it. */
+  mealLog?: MealLog;
+  /** The week whose plan the family has agreed, if it is the one on screen. */
+  agreedWeek?: string | null;
 }
 
 function freshSnapshot(): Snapshot {
@@ -203,6 +225,8 @@ function freshSnapshot(): Snapshot {
     restockStaples: false,
     calendarConnectedAs: null,
     weekNotes: {},
+    mealLog: emptyLog(),
+    agreedWeek: null,
   };
 }
 
@@ -234,6 +258,8 @@ export function createApp(
       attempts: number;
       costUsd: number;
       seconds: number;
+      reasoning?: string;
+      revised?: boolean;
     },
     lastCapture: null as null | {
       provider: string;
@@ -286,6 +312,46 @@ export function createApp(
         };
       });
   };
+
+  const mealLog = (): MealLog => state.mealLog ?? emptyLog();
+  const ingredientName = (id: string) => getIngredient(id)?.name ?? id;
+
+  /**
+   * What the screen shows of the log: dishes and their thumbs, the patterns,
+   * what is still waiting for a verdict, and which favourites the next plan
+   * will bring back — so nothing about the suggestions is a mystery.
+   */
+  const historySummary = () => {
+    const log = mealLog();
+    const thisWeek = state.plan.weekStarting;
+    const fourWeeksAgo = addDays(state.today, -28);
+    return {
+      meals: log.entries.filter((e) => !e.leftover).length,
+      dishes: dishStats(log).slice(0, 40),
+      patterns: patterns(log, ingredientName),
+      toRate: log.entries
+        .filter(
+          (e) =>
+            !e.leftover &&
+            !e.rating &&
+            e.date < state.today &&
+            e.date >= fourWeeksAgo &&
+            e.weekStarting !== thisWeek,
+        )
+        .map((e) => ({ date: e.date, slot: e.slot, title: e.title }))
+        .reverse(),
+      comingBack: chooseRepeats(log, thisWeek).map((r) => ({
+        title: r.title,
+        weeksSince: r.weeksSince,
+      })),
+    };
+  };
+
+  /** This week's meal's rating, if it has one. */
+  const ratingOf = (date: string, slot: MealSlot, title: string): Rating | null =>
+    mealLog().entries.find(
+      (e) => e.date === date && e.slot === slot && e.key === dishKey(title),
+    )?.rating ?? null;
 
   /** What the WhatsApp message is written from: the plan and the week's table. */
   const shareInput = (): ShareInput => ({
@@ -395,6 +461,7 @@ export function createApp(
       today: state.today,
       source: state.source,
       lastRun: state.lastRun,
+      history: historySummary(),
       restockStaples: state.restockStaples,
       modelAvailable: ai.available,
       /** False on a first visit; the client shows the intro screen instead. */
@@ -432,8 +499,11 @@ export function createApp(
       },
       plan: {
         weekStarting: state.plan.weekStarting,
+        /** Agreed by the family: in the meal log, and what they are eating. */
+        agreed: state.agreedWeek === state.plan.weekStarting,
         meals: state.plan.meals.map((meal) => {
           const recipe = state.plan.recipes.find((r) => r.id === meal.recipeId);
+          const title = recipe?.title ?? meal.recipeId;
           return {
             ...meal,
             title: recipe?.title ?? meal.recipeId,
@@ -445,6 +515,10 @@ export function createApp(
             ingredients:
               recipe && !meal.leftoverOf ? ingredientLines(recipe, meal.servings) : [],
             sitting: weekByDate.get(meal.date) ?? null,
+            // Rated once it has been eaten, never before — and never the
+            // leftover night, which would only score the same dish twice.
+            rateable: !meal.leftoverOf && meal.date <= state.today,
+            rating: meal.leftoverOf ? null : ratingOf(meal.date, meal.slot, title),
           };
         }),
       },
@@ -1185,8 +1259,16 @@ export function createApp(
 
       /* ---- the plan ---- */
 
-      case "/api/plan/generate": {
+      case "/api/plan/generate":
+      /* A revision: the same planner, shown the plan as it stands and told to
+         change only what this week's notes ask for. */
+      case "/api/plan/revise": {
         if (!ai.generatePlan) return bad(400, NO_MODEL);
+        const revising = path === "/api/plan/revise";
+        if (revising && !weekNote()) {
+          return bad(400, "Write what you would like changed in the box above the button first.");
+        }
+
         const week = currentWeek();
         const projection = projectLarder(
           state.larder,
@@ -1194,26 +1276,73 @@ export function createApp(
           state.today,
           householdPortions(state.people),
         );
+        // The favourites due back this week, decided here once, so the prompt
+        // that names them and the recipes handed over always agree.
+        const log = mealLog();
+        const repeats = chooseRepeats(log, state.plan.weekStarting);
+        const history = historyForPrompt(log, state.plan.weekStarting, repeats, ingredientName);
         const started = Date.now();
         try {
-          const run = await ai.generatePlan(currentConstraints(), {
-            // Days with nobody in are not slots worth filling.
-            slots: slotsFromWeek(week),
-            larderLines: larderForPrompt(projection),
-          });
+          const run = await ai.generatePlan(
+            { ...currentConstraints(), history: history || undefined },
+            {
+              // Days with nobody in are not slots worth filling.
+              slots: slotsFromWeek(week),
+              larderLines: larderForPrompt(projection),
+              reuse: repeats.map((r) => ({ ...r.recipe, id: repeatId(r.key) })),
+              ...(revising ? { current: state.plan } : {}),
+            },
+          );
           state.plan = run.plan;
           state.source = "model";
+          // A changed plan is a new proposal: it needs agreeing again. The log
+          // keeps what was agreed until then, and agreeing replaces it.
+          if (state.agreedWeek === state.plan.weekStarting) state.agreedWeek = null;
           state.lastRun = {
             provider: run.provider,
             model: run.model,
             attempts: run.attempts,
             costUsd: run.costUsd,
             seconds: Number(((Date.now() - started) / 1000).toFixed(1)),
+            ...(run.reasoning ? { reasoning: run.reasoning } : {}),
+            revised: revising,
           };
           return ok();
         } catch (error) {
           return bad(400, message(error));
         }
+      }
+
+      /* "This is what we are eating." Puts the week in the meal log, which is
+         what ratings attach to and what future plans learn from. */
+      case "/api/plan/agree": {
+        const cooks = Object.fromEntries(currentWeek().map((d) => [d.date, d.cookName]));
+        state.mealLog = recordWeek(mealLog(), state.plan, cooks);
+        state.agreedWeek = state.plan.weekStarting;
+        return ok();
+      }
+
+      /* Thumbs up, thumbs down, or null to take it back. A meal from this
+         week that was never formally agreed is logged on being rated:
+         somebody ate it, which is agreement enough. */
+      case "/api/meal/rate": {
+        const date = String(body.date ?? "");
+        const slot = (body.slot ?? "dinner") as MealSlot;
+        const rating: Rating | null =
+          body.rating === "up" || body.rating === "down" ? body.rating : null;
+        if (body.rating != null && rating === null) return bad(400, "rating is up, down or null");
+        if (date > state.today) return bad(400, "That meal has not been eaten yet.");
+
+        let log = mealLog();
+        const logged = (l: MealLog) =>
+          l.entries.some((e) => e.date === date && e.slot === slot && !e.leftover);
+        if (!logged(log) && state.plan.meals.some((m) => m.date === date && m.slot === slot)) {
+          const cooks = Object.fromEntries(currentWeek().map((d) => [d.date, d.cookName]));
+          log = recordWeek(log, state.plan, cooks);
+        }
+        if (!logged(log)) return bad(404, "That meal is not in the log.");
+        state.mealLog = rateMeal(log, date, slot, rating);
+        return ok();
       }
 
       case "/api/plan/reset": {
@@ -1244,6 +1373,8 @@ export function createApp(
       restockStaples: state.restockStaples,
       calendarConnectedAs: state.calendarConnectedAs,
       weekNotes: state.weekNotes ?? {},
+      mealLog: state.mealLog ?? emptyLog(),
+      agreedWeek: state.agreedWeek ?? null,
     };
   }
 

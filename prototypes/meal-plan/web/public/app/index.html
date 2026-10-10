@@ -53,6 +53,7 @@
       <button type="button" id="sync-state" class="sync-chip" hidden></button>
       <button type="button" id="account" class="btn">Account</button>
       <button type="button" id="who" class="btn">Who lives here</button>
+      <button type="button" id="history" class="btn">History</button>
       <button type="button" id="calendar" class="btn">Connect calendar</button>
       <button type="button" id="replan" class="btn btn-primary">Replan with AI</button>
     </div>
@@ -89,8 +90,12 @@
   <label class="note-box">
     <span class="note-label">Anything different this week?</span>
     <textarea id="week-note" rows="2" maxlength="2000"
-      placeholder="Jess away Thursday · use up the leftover chicken · birthday tea on Saturday"></textarea>
+      placeholder="Jess away Thursday · use up the leftover chicken · birthday tea on Saturday · no pasta twice, please"></textarea>
   </label>
+  <div class="note-actions">
+    <button type="button" id="revise" class="btn btn-small">Revise the plan with this note</button>
+    <span class="note-hint">Changes only what the note asks for. Replan with AI starts again from scratch.</span>
+  </div>
   <p id="standing-line" class="standing-line" hidden></p>
 </section>
 
@@ -116,6 +121,18 @@
     <button type="button" id="basket-close" class="btn">Done</button>
   </div>
   <div id="basket-body" class="account-body"></div>
+</section>
+
+<!-- Every agreed meal and what the family thought of it. Hidden until asked for. -->
+<section id="history-panel" class="grid-panel" aria-labelledby="h-history" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-history">History</h2>
+      <p id="history-sub" class="grid-sub"></p>
+    </div>
+    <button type="button" id="history-close" class="btn">Done</button>
+  </div>
+  <div id="history-body" class="history-body"></div>
 </section>
 
 <!-- Profiles. Hidden until asked for; this is setup, not daily use. -->
@@ -146,6 +163,8 @@
     <div class="column-head">
       <h2 id="h-week">Meals</h2>
       <span id="week-source" class="tag"></span>
+      <span id="agreed" class="tag agreed" hidden>Agreed ✓</span>
+      <button type="button" id="agree" class="btn btn-small btn-primary">Agree this plan</button>
       <button type="button" id="share-week" class="btn btn-small">Share week</button>
     </div>
     <dialog id="share-dialog" class="share-dialog" aria-labelledby="h-share">
