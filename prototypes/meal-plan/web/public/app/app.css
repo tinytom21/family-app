@@ -1048,7 +1048,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   display: flex; flex-direction: column; gap: 1.1rem;
 }
 .step-page > .grid-panel { margin: 0; }
-.step-page .columns { padding: 0; max-width: none; }
+.step-page .columns { padding: 0; max-width: none; margin: 0; width: 100%; }
 .step-intro { display: flex; flex-direction: column; gap: .3rem; max-width: 46rem; }
 .step-intro h2 { font-size: 1.35rem; font-weight: 700; text-wrap: balance; }
 .step-intro p { color: var(--ink-soft); font-size: .9rem; }
@@ -1083,3 +1083,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .step-next { justify-content: stretch; }
   .step-next .btn-big { width: 100%; }
 }
+
+/* Shopping gets the room: the list flows into columns on a wide screen, the
+   larder sits narrower beside it. */
+@media (min-width: 900px) {
+  .shop-columns { grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr); }
+  .cook-columns { grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr); }
+}
+.shop-columns .list { display: block; columns: 3 15rem; column-gap: 1.75rem; }
+.shop-columns .list > div { margin-bottom: .9rem; }
+.shop-columns .aisle-name { break-after: avoid; }
+.shop-columns .line { break-inside: avoid; }
