@@ -25,116 +25,30 @@
       </div>
     </div>
 
-    <div class="summary" role="group" aria-label="This week at a glance">
-      <div class="stat">
-        <span id="stat-items" class="stat-figure">—</span>
-        <span class="stat-label">to buy</span>
-      </div>
-      <div class="stat">
-        <span id="stat-leftovers" class="stat-figure">—</span>
-        <span class="stat-label">with leftovers</span>
-      </div>
-      <div class="stat">
-        <span id="stat-useup" class="stat-figure">—</span>
-        <span class="stat-label">to use up</span>
-      </div>
-      <div class="stat">
-        <span id="stat-jobs" class="stat-figure">—</span>
-        <span class="stat-label">jobs due</span>
-      </div>
-    </div>
-
     <div class="actions">
-      <label class="toggle">
-        <input type="checkbox" id="restock">
-        <span>Restock staples</span>
-      </label>
-      <button type="button" id="basket" class="btn">Basket</button>
       <button type="button" id="sync-state" class="sync-chip" hidden></button>
-      <button type="button" id="account" class="btn">Account</button>
-      <button type="button" id="who" class="btn">Who lives here</button>
-      <button type="button" id="history" class="btn">History</button>
-      <button type="button" id="calendar" class="btn">Connect calendar</button>
-      <button type="button" id="replan" class="btn btn-primary">Replan with AI</button>
+      <button type="button" id="who" class="btn btn-quiet">Family</button>
+      <button type="button" id="history" class="btn btn-quiet">History</button>
+      <button type="button" id="calendar" class="btn btn-quiet">Connect calendar</button>
+      <button type="button" id="account" class="btn btn-quiet">Account</button>
     </div>
   </div>
+
+  <!-- The week, in the order it is done. Each step says how it stands; the
+       first one not yet done is marked as the next thing to do. -->
+  <nav class="steps" aria-label="This week, step by step">
+    <ol>
+      <li><button type="button" class="step-tab" data-step="who"><span class="step-num">1</span><span class="step-words"><span class="step-name">Who's in</span><span class="step-state" id="state-who"></span></span></button></li>
+      <li><button type="button" class="step-tab" data-step="plan"><span class="step-num">2</span><span class="step-words"><span class="step-name">Plan meals</span><span class="step-state" id="state-plan"></span></span></button></li>
+      <li><button type="button" class="step-tab" data-step="shop"><span class="step-num">3</span><span class="step-words"><span class="step-name">Shop</span><span class="step-state" id="state-shop"></span></span></button></li>
+      <li><button type="button" class="step-tab" data-step="cook"><span class="step-num">4</span><span class="step-words"><span class="step-name">Cook &amp; rate</span><span class="step-state" id="state-cook"></span></span></button></li>
+    </ol>
+  </nav>
   <p id="status" class="status" role="status" aria-live="polite"></p>
 </header>
 
-<!-- The week's grid: who is in, who cooks, how long they have. -->
-<section id="grid-panel" class="grid-panel" aria-labelledby="h-grid">
-  <div class="grid-head">
-    <div>
-      <h2 id="h-grid">This week's table</h2>
-      <p id="grid-sub" class="grid-sub"></p>
-      <label class="week-start">
-        <span>Week starting</span>
-        <input type="date" id="week-start">
-      </label>
-    </div>
-    <div class="grid-actions">
-      <button type="button" id="grid-reset" class="btn">Back to the calendar</button>
-      <button type="button" id="grid-confirm" class="btn btn-primary">Looks right</button>
-    </div>
-  </div>
-  <div class="scroller">
-    <table id="grid" class="grid"></table>
-  </div>
-  <p class="legend">
-    <span class="chip calendar">calendar</span> read from a diary ·
-    <span class="chip assumed">assumed</span> nobody's calendar says ·
-    <span class="chip usual">usual</span> your usual week ·
-    <span class="chip override">you</span> someone corrected it
-  </p>
-  <div id="usual-week" class="usual-week"></div>
-  <label class="note-box">
-    <span class="note-label">Anything different this week?</span>
-    <textarea id="week-note" rows="2" maxlength="2000"
-      placeholder="Jess away Thursday · use up the leftover chicken · birthday tea on Saturday · no pasta twice, please"></textarea>
-  </label>
-  <div class="note-actions">
-    <button type="button" id="revise" class="btn btn-small">Revise the plan with this note</button>
-    <span class="note-hint">Changes only what the note asks for. Replan with AI starts again from scratch.</span>
-  </div>
-  <p id="standing-line" class="standing-line" hidden></p>
-</section>
-
-<!-- Account and family sharing. Hidden until asked for. -->
-<section id="account-panel" class="grid-panel" aria-labelledby="h-account" hidden>
-  <div class="grid-head">
-    <div>
-      <h2 id="h-account">Account</h2>
-      <p id="account-sub" class="grid-sub"></p>
-    </div>
-    <button type="button" id="account-close" class="btn">Done</button>
-  </div>
-  <div id="account-body" class="account-body"></div>
-</section>
-
-<!-- Filling a supermarket basket. Local server only; hidden until asked for. -->
-<section id="basket-panel" class="grid-panel" aria-labelledby="h-basket" hidden>
-  <div class="grid-head">
-    <div>
-      <h2 id="h-basket">Basket</h2>
-      <p id="basket-sub" class="grid-sub"></p>
-    </div>
-    <button type="button" id="basket-close" class="btn">Done</button>
-  </div>
-  <div id="basket-body" class="account-body"></div>
-</section>
-
-<!-- Every agreed meal and what the family thought of it. Hidden until asked for. -->
-<section id="history-panel" class="grid-panel" aria-labelledby="h-history" hidden>
-  <div class="grid-head">
-    <div>
-      <h2 id="h-history">History</h2>
-      <p id="history-sub" class="grid-sub"></p>
-    </div>
-    <button type="button" id="history-close" class="btn">Done</button>
-  </div>
-  <div id="history-body" class="history-body"></div>
-</section>
-
+<!-- Set-up and look-back, opened from the top bar above whichever step is showing. -->
+<div class="panels">
 <!-- Profiles. Hidden until asked for; this is setup, not daily use. -->
 <section id="people-panel" class="grid-panel" aria-labelledby="h-people" hidden>
   <div class="grid-head">
@@ -157,15 +71,93 @@
   </form>
 </section>
 
-<main class="columns">
+<!-- Every agreed meal and what the family thought of it. Hidden until asked for. -->
+<section id="history-panel" class="grid-panel" aria-labelledby="h-history" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-history">History</h2>
+      <p id="history-sub" class="grid-sub"></p>
+    </div>
+    <button type="button" id="history-close" class="btn">Done</button>
+  </div>
+  <div id="history-body" class="history-body"></div>
+</section>
 
-  <section class="column" aria-labelledby="h-week">
+<!-- Account and family sharing. Hidden until asked for. -->
+<section id="account-panel" class="grid-panel" aria-labelledby="h-account" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-account">Account</h2>
+      <p id="account-sub" class="grid-sub"></p>
+    </div>
+    <button type="button" id="account-close" class="btn">Done</button>
+  </div>
+  <div id="account-body" class="account-body"></div>
+</section>
+</div>
+
+<main id="step-who" class="step-page" hidden>
+  <div class="step-intro">
+    <p class="step-eyebrow">Step 1 of 4</p>
+    <h2>Check who's in this week</h2>
+    <p>Tick who's home for dinner each night, and pick who's cooking and how long they have. Your usual week fills it in; change anything that's different.</p>
+  </div>
+<section id="grid-panel" class="grid-panel" aria-labelledby="h-grid">
+  <div class="grid-head">
+    <div>
+      <h2 id="h-grid">Who's in, and who cooks</h2>
+      <p id="grid-sub" class="grid-sub"></p>
+      <label class="week-start">
+        <span>Week starting</span>
+        <input type="date" id="week-start">
+      </label>
+    </div>
+    <div class="grid-actions">
+      <button type="button" id="grid-reset" class="btn">Back to the calendar</button>
+    </div>
+  </div>
+  <div class="scroller">
+    <table id="grid" class="grid"></table>
+  </div>
+  <p class="legend">
+    <span class="chip calendar">calendar</span> read from a diary ·
+    <span class="chip assumed">assumed</span> nobody's calendar says ·
+    <span class="chip usual">usual</span> your usual week ·
+    <span class="chip override">you</span> someone corrected it
+  </p>
+  <div id="usual-week" class="usual-week"></div>
+</section>
+  <div class="step-next">
+    <button type="button" id="grid-confirm" class="btn btn-primary btn-big">Looks right — plan the meals →</button>
+  </div>
+</main>
+
+<main id="step-plan" class="step-page" hidden>
+  <div class="step-intro">
+    <p class="step-eyebrow">Step 2 of 4</p>
+    <h2>Plan the meals</h2>
+    <p>Note anything different about this week, then plan it with AI. Not quite right? Write what to change and press <em>Change just what the note says</em>. When it looks good, agree it.</p>
+  </div>
+  <section class="grid-panel plan-panel" aria-label="Notes for the planner">
+  <label class="note-box">
+    <span class="note-label">Anything different this week?</span>
+    <textarea id="week-note" rows="2" maxlength="2000"
+      placeholder="Jess away Thursday · use up the leftover chicken · birthday tea on Saturday · no pasta twice, please"></textarea>
+  </label>
+  <div class="note-actions">
+    <button type="button" id="replan" class="btn btn-primary">Plan the week with AI</button>
+    <button type="button" id="revise" class="btn">Change just what the note says</button>
+  </div>
+  <p class="note-hint"><strong>Plan the week</strong> starts again from scratch. <strong>Change just what the note says</strong> keeps every other evening as it is.</p>
+  <p id="standing-line" class="standing-line" hidden></p>
+  </section>
+  <div id="plan-slot" class="slot">
+<section id="meals-column" class="column" aria-labelledby="h-week">
     <div class="column-head">
       <h2 id="h-week">Meals</h2>
       <span id="week-source" class="tag"></span>
       <span id="agreed" class="tag agreed" hidden>Agreed ✓</span>
-      <button type="button" id="agree" class="btn btn-small btn-primary">Agree this plan</button>
-      <button type="button" id="share-week" class="btn btn-small">Share week</button>
+      <button type="button" id="share-week" class="btn btn-small">Share to WhatsApp</button>
     </div>
     <dialog id="share-dialog" class="share-dialog" aria-labelledby="h-share">
       <h2 id="h-share">Copy this into WhatsApp</h2>
@@ -179,8 +171,91 @@
     <ol id="week" class="week"></ol>
     <div id="validation" class="validation"></div>
   </section>
+  </div>
+  <div class="step-next">
+    <button type="button" id="agree" class="btn btn-primary btn-big">Agree this plan — on to the shopping →</button>
+    <p id="agreed-next" class="step-done-line" hidden>Agreed. <button type="button" class="link-btn" data-go="shop">Go to the shopping →</button></p>
+  </div>
+</main>
 
-  <section class="column" aria-labelledby="h-jobs">
+<main id="step-shop" class="step-page" hidden>
+  <div class="step-intro">
+    <p class="step-eyebrow">Step 3 of 4</p>
+    <h2>Do the shopping</h2>
+    <p>The list is what the meals need, less what's already in the house. Put the larder right if it's wrong, then shop from the list or fill a Tesco basket.</p>
+    <div class="step-tools">
+      <label class="toggle">
+        <input type="checkbox" id="restock">
+        <span>Restock staples too</span>
+      </label>
+      <button type="button" id="basket" class="btn">Fill a Tesco basket</button>
+    </div>
+  </div>
+<!-- Filling a supermarket basket. Local server only; hidden until asked for. -->
+<section id="basket-panel" class="grid-panel" aria-labelledby="h-basket" hidden>
+  <div class="grid-head">
+    <div>
+      <h2 id="h-basket">Basket</h2>
+      <p id="basket-sub" class="grid-sub"></p>
+    </div>
+    <button type="button" id="basket-close" class="btn">Done</button>
+  </div>
+  <div id="basket-body" class="account-body"></div>
+</section>
+  <div class="columns">
+<section class="column" aria-labelledby="h-list">
+    <div class="column-head">
+      <h2 id="h-list">Shopping list</h2>
+      <span id="list-count" class="tag"></span>
+    </div>
+    <div id="list" class="list"></div>
+    <div id="list-footnotes" class="footnotes"></div>
+  </section>
+
+<section class="column" aria-labelledby="h-larder">
+    <div class="column-head">
+      <h2 id="h-larder">Larder</h2>
+      <span id="larder-count" class="tag"></span>
+    </div>
+
+    <div id="use-up" class="useup" hidden>
+      <h3>Use up first</h3>
+      <ul id="use-up-list"></ul>
+    </div>
+
+    <div id="freezer-offers" class="offers" hidden>
+      <h3>Spare portions this week</h3>
+      <ul id="freezer-offer-list"></ul>
+    </div>
+
+    <h3 class="subhead">In the cupboard and fridge</h3>
+    <ul id="stock" class="stock"></ul>
+
+    <h3 class="subhead">Freezer</h3>
+    <ul id="freezer" class="freezer"></ul>
+
+    <p class="legend">
+      <span class="chip confirmed">confirmed</span> you checked ·
+      <span class="chip predicted">predicted</span> derived from the plan ·
+      <span class="chip stale">stale</span> too old to trust, so it is bought anyway
+    </p>
+  </section>
+  </div>
+  <div class="step-next">
+    <button type="button" id="shopped" class="btn btn-primary btn-big">Shopping done — on to the week →</button>
+    <p id="shopped-next" class="step-done-line" hidden>Shopping done. <button type="button" class="link-btn" id="unshop">Not yet, actually</button></p>
+  </div>
+</main>
+
+<main id="step-cook" class="step-page" hidden>
+  <div class="step-intro">
+    <p class="step-eyebrow">Step 4 of 4</p>
+    <h2>Cook, share and rate</h2>
+    <p>Send the week to WhatsApp so everyone knows who's cooking what. Each evening's method is under its meal. After eating, give it a 👍 or 👎 — that's how the next plan learns what you like.</p>
+  </div>
+  <div class="columns">
+    <div id="cook-slot" class="slot"></div>
+<section class="column" aria-labelledby="h-jobs">
     <div class="column-head">
       <h2 id="h-jobs">Jobs</h2>
       <span id="jobs-count" class="tag"></span>
@@ -210,45 +285,7 @@
     </form>
     <p id="capture-note" class="footnotes" hidden></p>
   </section>
-
-  <section class="column" aria-labelledby="h-list">
-    <div class="column-head">
-      <h2 id="h-list">Shopping list</h2>
-      <span id="list-count" class="tag"></span>
-    </div>
-    <div id="list" class="list"></div>
-    <div id="list-footnotes" class="footnotes"></div>
-  </section>
-
-  <section class="column" aria-labelledby="h-larder">
-    <div class="column-head">
-      <h2 id="h-larder">Larder</h2>
-      <span id="larder-count" class="tag"></span>
-    </div>
-
-    <div id="use-up" class="useup" hidden>
-      <h3>Use up first</h3>
-      <ul id="use-up-list"></ul>
-    </div>
-
-    <div id="freezer-offers" class="offers" hidden>
-      <h3>Spare portions this week</h3>
-      <ul id="freezer-offer-list"></ul>
-    </div>
-
-    <h3 class="subhead">In the cupboard and fridge</h3>
-    <ul id="stock" class="stock"></ul>
-
-    <h3 class="subhead">Freezer</h3>
-    <ul id="freezer" class="freezer"></ul>
-
-    <p class="legend">
-      <span class="chip confirmed">confirmed</span> you checked ·
-      <span class="chip predicted">predicted</span> derived from the plan ·
-      <span class="chip stale">stale</span> too old to trust, so it is bought anyway
-    </p>
-  </section>
-
+  </div>
 </main>
 
 </div><!-- /app-shell -->

@@ -242,6 +242,7 @@ function syncButtons() {
   $("basket").disabled = busy;
   $("revise").disabled = busy || !window.__modelAvailable;
   $("agree").disabled = busy;
+  $("shopped").disabled = busy;
 }
 
 /* ------------------------------------------------------------------ */
@@ -257,7 +258,6 @@ function render(state) {
     `${dateFormat.format(asDate(dates[0]))} – ${dateFormat.format(asDate(dates.at(-1)))} · ` +
     `${state.household.portions} portions a sitting`;
 
-  renderSummary(state);
   renderGrid(state);
   renderPeople(state);
   renderWeek(state);
@@ -267,12 +267,13 @@ function render(state) {
   renderCalendarButton(state);
   renderAgreement(state);
   renderHistory(state);
+  renderSteps(state);
 
   $("restock").checked = state.restockStaples;
   $("week-source").textContent =
     state.source === "model"
       ? `${state.lastRun.model} · ${state.lastRun.attempts} attempt${state.lastRun.attempts > 1 ? "s" : ""} · $${state.lastRun.costUsd.toFixed(4)} · ${state.lastRun.seconds}s`
-      : "starter week — Replan with AI for one of your own";
+      : "starter week — plan the week with AI for one of your own";
 
   $("replan").title = state.modelAvailable
     ? "Plan this week with AI, around the table, your notes and what is in the house"
@@ -315,7 +316,93 @@ function ratingButtons(meal) {
 
 function renderAgreement(state) {
   $("agree").hidden = state.plan.agreed;
+  $("agreed-next").hidden = !state.plan.agreed;
   $("agreed").hidden = !state.plan.agreed;
+  $("shopped").hidden = state.plan.shopped;
+  $("shopped-next").hidden = !state.plan.shopped;
+}
+
+/* ---------------- the week, step by step ---------------- */
+
+const STEPS = ["who", "plan", "shop", "cook"];
+let step = null;
+
+/**
+ * The first thing this week still needs.
+ *
+ * Shopping is skipped once the week has begun: by then the food is in one way
+ * or another, and what the family wants on opening the app is tonight's meal.
+ */
+function nextStep(state) {
+  if (!state.plan.agreed) return state.week.confirmed ? "plan" : "who";
+  const started = state.today >= state.plan.meals.map((m) => m.date).sort()[0];
+  if (!state.plan.shopped && !started) return "shop";
+  return "cook";
+}
+
+/** A word on each step tab, and which is next. */
+function renderSteps(state) {
+  const toRate = state.history?.toRate?.length ?? 0;
+  const words = {
+    who: state.week.confirmed
+      ? "✓ Checked"
+      : state.week.assumed > 0
+        ? `${state.week.assumed} to check`
+        : "Check it",
+    plan: state.plan.agreed
+      ? "✓ Agreed"
+      : state.source === "model"
+        ? "Planned — agree it"
+        : "Not planned yet",
+    shop: state.plan.shopped
+      ? "✓ Done"
+      : `${state.list.lines.length} to buy`,
+    cook: toRate > 0 ? `${toRate} to rate` : state.plan.agreed ? "Share and cook" : "After the shopping",
+  };
+  const done = {
+    who: state.week.confirmed || state.plan.agreed,
+    plan: state.plan.agreed,
+    shop: state.plan.shopped,
+    cook: false,
+  };
+  const next = nextStep(state);
+  for (const tab of document.querySelectorAll(".step-tab")) {
+    const name = tab.dataset.step;
+    $(`state-${name}`).textContent = words[name];
+    tab.classList.toggle("done", done[name]);
+    tab.classList.toggle("next", name === next);
+  }
+  // The first time round, open on whatever needs doing; after that, stay
+  // where the family is — a save arriving should never move the page.
+  showStep(step ?? next);
+}
+
+function showStep(name) {
+  step = name;
+  for (const id of STEPS) $(`step-${id}`).hidden = id !== name;
+  for (const tab of document.querySelectorAll(".step-tab")) {
+    if (tab.dataset.step === name) tab.setAttribute("aria-current", "step");
+    else tab.removeAttribute("aria-current");
+  }
+  // One list of meals, shown where it is wanted: to agree in step 2, to
+  // cook from, share and rate in step 4.
+  const home = name === "cook" ? $("cook-slot") : $("plan-slot");
+  if ($("meals-column").parentElement !== home) home.append($("meals-column"));
+}
+
+function goTo(name) {
+  showStep(name);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+for (const tab of document.querySelectorAll(".step-tab")) {
+  tab.addEventListener("click", () => {
+    setStatus("");
+    goTo(tab.dataset.step);
+  });
+}
+for (const link of document.querySelectorAll("[data-go]")) {
+  link.addEventListener("click", () => goTo(link.dataset.go));
 }
 
 /**
@@ -495,21 +582,6 @@ function asDate(iso) {
  * total anyone should believe. These are the three numbers that actually
  * change what you do next.
  */
-function renderSummary(state) {
-  $("stat-items").textContent = String(state.list.lines.length);
-  $("stat-leftovers").textContent = String(state.list.linesWithSurplus);
-
-  const useUp = state.larder.useUpFirst.length;
-  $("stat-useup").textContent = String(useUp);
-  $("stat-useup").parentElement.classList.toggle("attention", useUp > 0);
-
-  const due = state.tasks.items.filter(
-    (t) => t.status === "overdue" || t.status === "today",
-  ).length;
-  $("stat-jobs").textContent = String(due);
-  $("stat-jobs").parentElement.classList.toggle("attention", due > 0);
-}
-
 function renderWeek(state) {
   const list = $("week");
   list.replaceChildren();
@@ -876,8 +948,9 @@ function renderGrid(state) {
       : "Proposed from the calendars. Check it over before planning the week.";
 
   $("grid-panel").classList.toggle("needs-review", !confirmed);
-  $("grid-confirm").textContent = confirmed ? "Confirmed" : "Looks right";
-  $("grid-confirm").disabled = busy || confirmed;
+  $("grid-confirm").textContent = confirmed
+    ? "Next: plan the meals →"
+    : "Looks right — plan the meals →";
 
   const table = $("grid");
   table.replaceChildren();
@@ -1381,7 +1454,7 @@ $("account").addEventListener("click", async () => {
   panel.hidden = !panel.hidden;
   if (!panel.hidden) {
     await renderAccount();
-    panel.scrollIntoView({ block: "nearest" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
 $("account-close").addEventListener("click", () => {
@@ -1394,12 +1467,12 @@ $("sync-state").addEventListener("click", () => $("account").click());
 $("who").addEventListener("click", () => {
   const panel = $("people-panel");
   panel.hidden = !panel.hidden;
-  if (!panel.hidden) panel.scrollIntoView({ block: "nearest" });
+  if (!panel.hidden) window.scrollTo({ top: 0, behavior: "smooth" });
 });
 $("history").addEventListener("click", () => {
   const panel = $("history-panel");
   panel.hidden = !panel.hidden;
-  if (!panel.hidden) panel.scrollIntoView({ block: "nearest" });
+  if (!panel.hidden) window.scrollTo({ top: 0, behavior: "smooth" });
 });
 $("history-close").addEventListener("click", () => {
   $("history-panel").hidden = true;
@@ -1407,8 +1480,20 @@ $("history-close").addEventListener("click", () => {
 
 $("agree").addEventListener("click", async () => {
   const done = await call("/api/plan/agree");
-  if (done) setStatus("Agreed and logged. Rate each meal after you've eaten it — that's how future plans learn.");
+  if (done) {
+    setStatus("Agreed and logged. Next, the shopping.");
+    goTo("shop");
+  }
 });
+
+$("shopped").addEventListener("click", async () => {
+  const done = await call("/api/week/shopped", { done: true });
+  if (done) {
+    setStatus("Shopping done. Share the week, and rate each meal after you've eaten it.");
+    goTo("cook");
+  }
+});
+$("unshop").addEventListener("click", () => call("/api/week/shopped", { done: false }));
 
 /* Feedback on the plan before agreeing it, written in the week's note box.
    The box saves when it loses focus — which is exactly what pressing this
@@ -1444,7 +1529,11 @@ $("add-person").addEventListener("submit", async (event) => {
   if (result) $("new-name").value = "";
 });
 
-$("grid-confirm").addEventListener("click", () => call("/api/week/confirm"));
+$("grid-confirm").addEventListener("click", async () => {
+  // Already confirmed, the button is just the way forward.
+  const done = latestState?.week.confirmed ? latestState : await call("/api/week/confirm");
+  if (done) goTo("plan");
+});
 $("grid-reset").addEventListener("click", () => call("/api/week/reset", {}));
 
 $("capture").addEventListener("submit", async (event) => {
@@ -1499,11 +1588,11 @@ $("week-start").addEventListener("change", (event) => {
    screen under their typing and send a save to the account per letter. */
 $("week-note").addEventListener("change", async (event) => {
   const saved = await call("/api/week/note", { text: event.target.value });
-  if (saved) setStatus("Noted for this week. Replan with AI to use it.");
+  if (saved) setStatus("Noted for this week. Plan the week with AI to use it.");
 });
 $("instructions").addEventListener("change", async (event) => {
   const saved = await call("/api/household/instructions", { text: event.target.value });
-  if (saved) setStatus("Kept for every week. Replan with AI to use it.");
+  if (saved) setStatus("Kept for every week. Plan the week with AI to use it.");
 });
 
 /* ---------------- account ---------------- */

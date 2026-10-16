@@ -206,6 +206,8 @@ export interface Snapshot {
   mealLog?: MealLog;
   /** The week whose plan the family has agreed, if it is the one on screen. */
   agreedWeek?: string | null;
+  /** The week the family has done the shopping for. */
+  shoppedWeek?: string | null;
 }
 
 function freshSnapshot(): Snapshot {
@@ -227,6 +229,7 @@ function freshSnapshot(): Snapshot {
     weekNotes: {},
     mealLog: emptyLog(),
     agreedWeek: null,
+    shoppedWeek: null,
   };
 }
 
@@ -501,6 +504,8 @@ export function createApp(
         weekStarting: state.plan.weekStarting,
         /** Agreed by the family: in the meal log, and what they are eating. */
         agreed: state.agreedWeek === state.plan.weekStarting,
+        /** The shopping for this week is done. */
+        shopped: state.shoppedWeek === state.plan.weekStarting,
         meals: state.plan.meals.map((meal) => {
           const recipe = state.plan.recipes.find((r) => r.id === meal.recipeId);
           const title = recipe?.title ?? meal.recipeId;
@@ -1322,6 +1327,13 @@ export function createApp(
         return ok();
       }
 
+      /* The shopping is in, or not after all. Only a marker: it moves the
+         weekly steps along, and says so on every device. */
+      case "/api/week/shopped": {
+        state.shoppedWeek = body.done === false ? null : state.plan.weekStarting;
+        return ok();
+      }
+
       /* Thumbs up, thumbs down, or null to take it back. A meal from this
          week that was never formally agreed is logged on being rated:
          somebody ate it, which is agreement enough. */
@@ -1375,6 +1387,7 @@ export function createApp(
       weekNotes: state.weekNotes ?? {},
       mealLog: state.mealLog ?? emptyLog(),
       agreedWeek: state.agreedWeek ?? null,
+      shoppedWeek: state.shoppedWeek ?? null,
     };
   }
 

@@ -331,3 +331,15 @@ test("a revision needs a note, and hands over the plan as it stands", async () =
   assert.equal(state.lastRun.revised, true);
   assert.equal(state.plan.agreed, false, "a changed plan needs agreeing again");
 });
+
+test("the shopping is marked done for this week, and can be taken back", async () => {
+  const app = await household("2026-10-03");
+  let state: any = (await app.handle("/api/week/shopped", { done: true })).body;
+  assert.equal(state.plan.shopped, true);
+  state = (await app.handle("/api/week/shopped", { done: false })).body;
+  assert.equal(state.plan.shopped, false);
+
+  await app.handle("/api/week/shopped", { done: true });
+  state = (await app.handle("/api/week/start", { date: "2026-10-12" })).body;
+  assert.equal(state.plan.shopped, false, "a different week has not been shopped for");
+});
